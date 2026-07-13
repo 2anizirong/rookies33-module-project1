@@ -1,0 +1,23 @@
+# 환경변수 / API 키 (절대 커밋 금지)
+.env
+*.env
+
+# 데이터
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/README.md
+data/processed/*
+!data/processed/.gitkeep
+
+# 모델 아티팩트
+models/*.pkl
+
+# 파이썬
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# OS
+.DS_Store
