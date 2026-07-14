@@ -1,0 +1,22 @@
+
+[data-testid="stFileUploaderDropzone"] {
+    padding: 10px 10px 10px 10px;
+}
+/* 위젯 전체 하단 여백 축소 */
+[data-testid="stFileUploader"] {
+    margin-bottom: -10px;
+}
+
+
+
+/* 상세검색 헤더 크기 줄이기 */
+div[data-testid="stExpander"] summary{
+    padding: 8px 14px;
+    font-size:16px;
+    font-weight:700;
+}
+
+/* 내용 여백 줄이기 */
+div[data-testid="stExpanderDetails"]{
+    padding-top:10px;
+}
