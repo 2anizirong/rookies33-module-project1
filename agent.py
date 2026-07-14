@@ -1,36 +1,159 @@
-"""
-OpenAI Agent SDK 오케스트레이션 (Agent 파트: 장한수, 김민규)
+# predict_price()
+# ML 모델 호출
+# 입력받은 아이폰 정보를 ML 모델에 전달하여 적정 중고가를 반환한다.
+# 아이폰16프로 120만원이면 괜찮아??
+import joblib
+from preprocess import preprocess_input    # 팀원 구현 예정, 함수명/반환형태 확인 필요
 
-역할:
-- 메인(오케스트레이터) 에이전트 정의
-- predict_price_range()를 function tool로 등록
-- 필요 시 web_search / file_search 호스팅 툴 연결
-- 사용자 추가 질문에 Function Calling으로 응답
-"""
+# 모델은 앱 실행 시 한 번만 로드
+MODEL_PATH = "models/price_model.pkl"
+model_data = joblib.load(MODEL_PATH)
+model = model_data["model"]
+feature_columns = model_data["feature_columns"]
 
-# from agents import Agent, Runner, function_tool
-from predict import predict_price_range
+def predict_price(      # 제품명, 저장용량, 제품 상태를 이용하여 적정 중고가를 예측하는 함수
+    title: str,         
+    storage_gb: int,   
+    condition: str      
+) -> dict:
+    
+    # 입력 데이터 전처리
+    # TODO: preprocess_input()이 title/storage_gb/condition을
+    #       feature_columns(800+ 컬럼) 구조에 맞는 원-핫 벡터로 변환해줘야 함
+    #       (팀원 확인 필요: title 그대로 넣는지, model_family로 정규화해서 넣는지)
+   
+    features = preprocess_input(
+        title=title,
+        storage_gb=storage_gb,
+        condition=condition
+    )
+    
+    # 모델 예측 실행
+    predicted_price = model.predict(features)[0]
+
+    return {
+        "predicted_price": int(predicted_price),
+        "residual_std": model_data["residual_std"]  # detect_anomaly()에서 사용
+    }
 
 
-# @function_tool
-def price_prediction_tool(features: dict) -> dict:
-    """에이전트가 호출할 가격 예측 툴"""
-    return predict_price_range(features)
+# detect_annomaly()
+def detect_anomaly(
+    predicted_price: int,
+    selling_price: int,
+    residual_std: float   # pkl에서 로드된 model_data["residual_std"] 사용 권장
+) -> dict:
+    # 예측가격과 판매가격을 비교하여 이상 매물 여부를 판단한다
+
+    # 방어 코드: 예측가 또는 판매가가 유효하지 않으면 비교 자체가 불가능
+    if predicted_price <= 0 or selling_price <= 0:
+        return {
+            "status": "ERROR",
+            "message": "예측 가격 또는 판매 가격이 유효하지 않아 비교할 수 없습니다.",
+            "difference": None,
+            "difference_percent": None
+        }
+
+    difference = selling_price - predicted_price
+    percent = (difference / predicted_price) * 100
+
+    # residual_std 기준: 모델 예측 오차의 표준편차 대비 몇 배 벗어났는지로 판단
+    deviation = abs(difference) / residual_std
+
+    if deviation < 1:
+        status = "NORMAL"
+        message = "정상 거래 범위입니다."
+    elif deviation < 2:
+        status = "WARNING"
+        message = "시세와 다소 차이가 있습니다."
+    else:
+        status = "DANGER"
+        message = "허위 매물 가능성이 있으니 주의하세요."
+
+    return {
+        "status": status,
+        "message": message,
+        "difference": difference,
+        "difference_percent": round(percent, 2)
+    }
 
 
-def build_main_agent():
-    """
-    메인 에이전트 생성
-    - tools=[price_prediction_tool, web_search, file_search] 형태로 연결
-    - system prompt: 가격 판단 근거를 설명하되 사기 여부는 판정하지 않음
-    """
-    raise NotImplementedError
+tools = [
+    {
+        "type": "function",
+        "name": "predict_price",
+        "description": "입력받은 아이폰 정보를 기반으로 머신러닝 모델을 호출하여 적정 중고가를 예측한다.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "제품명 (예: iPhone 16 Pro)"
+                },
+                "storage_gb": {
+                    "type": "integer",
+                    "description": "저장용량(GB)",
+                    "enum": [64, 128, 256, 512, 1024]
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "제품 상태 등급",
+                    "enum": [
+                        "New",
+                        "Open Box",
+                        "Used",
+                        "Good - Refurbished",
+                        "Very Good - Refurbished",
+                        "For Parts Or Not Working"
+                    ]
+                }
+            },
+            "required": ["title", "storage_gb", "condition"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "detect_anomaly",
+        "description": "predict_price()로 얻은 예측 가격(및 모델 오차 정보)과 사용자가 제시한 판매 가격을 비교하여 정상/주의/위험 여부를 판단한다.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "predicted_price": {
+                    "type": "number",
+                    "description": "predict_price 함수가 반환한 예측 적정가(원)"
+                },
+                "selling_price": {
+                    "type": "number",
+                    "description": "사용자가 제시한 실제 판매 가격(원)"
+                },
+                "residual_std": {
+                    "type": "number",
+                    "description": "predict_price 함수가 반환한 모델 오차의 표준편차"
+                }
+            },
+            "required": ["predicted_price", "selling_price", "residual_std"],
+            "additionalProperties": False
+        }
+    }
+]
+
+# input_message = [
+#     {
+#         "role": "user",
+#         "content": "아이폰16 프로 256GB 상태 Excellent인데 120만원이면 괜찮아?"
+#     }
+# ]
+
+result = predict_price(
+    title="iPhone 16 Pro",
+    storage_gb=256,
+    condition="Very Good - Refurbished"
+)
+print(result)
 
 
-def run_pipeline(user_input: dict):
-    """
-    1) price_prediction_tool 호출 -> 적정가격/가격범위/분류
-    2) 에이전트가 자연어로 판단 근거 설명
-    3) 사용자의 추가 질문에 Function Calling으로 응답
-    """
-    raise NotImplementedError
+# storage_gb, condition의 enum 값은 지금 내가 일반적인 아이폰 스토리지/상태 등급 기준으로 임의로 넣은 거야. 실제 학습 데이터(train.py/전처리)에서 쓰는 카테고리 값이랑 반드시 똑같아야 하니까, 팀원한테 정확한 값 목록 확인해서 여기 맞춰야 해.
+
