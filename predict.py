@@ -99,6 +99,12 @@ def predict_price_range(features: dict) -> dict:
 
     # input_price는 모델 예측에 쓰는 값이 아니므로 따로 분리
     input_price = features.get("input_price")
+    if input_price is not None:
+        try:
+            input_price = float(input_price)
+        except (ValueError, TypeError):
+            input_price = None
+
     model_input = {k: v for k, v in features.items() if k != "input_price"}
 
     # 나머지 feature들만 모델이 이해할 수 있는 형태로 변환
