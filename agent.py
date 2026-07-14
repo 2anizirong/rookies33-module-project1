@@ -1,9 +1,36 @@
-# predict_price()
-# ML 모델 호출
-# 입력받은 아이폰 정보를 ML 모델에 전달하여 적정 중고가를 반환한다.
-# 아이폰16프로 120만원이면 괜찮아??
+"""
+agent.py
+
+<필요 함수>
+predict_price(), detect_anomaly(), search_market_price() - web search,
+search_buying_guide() - file search, generate_result()
+"""
+
+# ==========================================================
+# 모듈 import (전부 파일 최상단에 모음)
+# ==========================================================
+import os
+
 import joblib
+from dotenv import load_dotenv
+from openai import OpenAI
+
 from preprocess import preprocess_input    # 팀원 구현 예정, 함수명/반환형태 확인 필요
+
+
+# ==========================================================
+# 상수 / 클라이언트 / 모델 로드
+# ==========================================================
+
+# .env 파일에서 환경변수 로드 (OPENAI_API_KEY 등)
+load_dotenv()
+
+# OpenAI API Client 생성 - 환경변수에서 키를 불러와 사용 (하드코딩 금지)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# File Search에서 사용할 Vector Store ID (이것도 .env에서 관리하는 걸 추천)
+VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
 # 모델은 앱 실행 시 한 번만 로드
 MODEL_PATH = "models/price_model.pkl"
@@ -11,6 +38,75 @@ model_data = joblib.load(MODEL_PATH)
 model = model_data["model"]
 feature_columns = model_data["feature_columns"]
 
+
+# ==========================================================
+# Web Search : 최신 중고 시세 검색
+# ==========================================================
+def search_market_price(product_name: str) -> str:
+
+    # GPT에게 전달할 프롬프트
+    prompt = f"""
+    '{product_name}'의 최신 중고 거래 시세를 검색해주세요.
+
+    다음 내용을 포함하여 알려주세요.
+
+    1. 최저 거래가
+    2. 평균 거래가
+    3. 최고 거래가
+    4. 최근 시세 동향
+    """
+
+    # OpenAI Web Search 실행
+    response = client.responses.create(
+        model="gpt-5",
+        tools=[
+            {
+                "type": "web_search_preview"
+            }
+        ],
+        input=prompt
+    )
+
+    # 검색 결과 반환
+    return response.output_text
+
+
+# ==========================================================
+# File Search : 휴대폰 구매 가이드 검색
+# ==========================================================
+def search_buying_guide(product_name: str) -> str:
+
+    # GPT에게 전달할 프롬프트
+    prompt = f"""
+    내부 구매 가이드 문서를 참고하여
+    '{product_name}' 구매 시 확인해야 하는 사항을 알려주세요.
+
+    다음 항목에 대해서만 알려주세요.
+
+    1. 저장 용량 (128GB / 256GB / 512GB)
+    2. 배터리 성능(효율)
+    """
+
+    # OpenAI File Search 실행
+    response = client.responses.create(
+        model="gpt-5",
+        tools=[
+            {
+                "type": "file_search",
+                "vector_store_ids": [VECTOR_STORE_ID]
+            }
+        ],
+        input=prompt
+    )
+
+    # 검색 결과 반환
+    return response.output_text
+
+
+# predict_price()
+# ML 모델 호출
+# 입력받은 아이폰 정보를 ML 모델에 전달하여 적정 중고가를 반환한다.
+# 아이폰16프로 120만원이면 괜찮아??
 def predict_price(      # 제품명, 저장용량, 제품 상태를 이용하여 적정 중고가를 예측하는 함수
     title: str,         
     storage_gb: int,   
@@ -78,6 +174,9 @@ def detect_anomaly(
     }
 
 
+# ==========================================================
+# Function Calling용 tools 정의
+# ==========================================================
 tools = [
     {
         "type": "function",
@@ -94,7 +193,7 @@ tools = [
                 "storage_gb": {
                     "type": "integer",
                     "description": "저장용량(GB)",
-                    "enum": [64, 128, 256, 512, 1024]
+                    "enum": [64, 128, 256, 512, 1024, 2048]
                 },
                 "condition": {
                     "type": "string",
@@ -140,6 +239,11 @@ tools = [
     }
 ]
 
+
+# ==========================================================
+# 메인 실행부
+# ==========================================================
+
 # input_message = [
 #     {
 #         "role": "user",
@@ -154,7 +258,26 @@ result = predict_price(
 )
 print(result)
 
-
 # storage_gb, condition의 enum 값은 지금 내가 일반적인 아이폰 스토리지/상태 등급 기준으로 임의로 넣은 것. 
 # 실제 학습 데이터(train.py/전처리)에서 쓰는 카테고리 값이랑 반드시 똑같아야 하니까, 팀원한테 정확한 값 목록 확인해서 여기 맞춰야 함.
 
+if __name__ == "__main__":
+    # 사용자가 휴대폰 모델명을 입력
+    product_name = input("휴대폰 모델명을 입력하세요 : ")
+
+    # 최신 중고 시세 검색
+    market_result = search_market_price(product_name)
+
+    # 구매 가이드 검색
+    guide_result = search_buying_guide(product_name)
+
+
+    # ==========================================================
+    # 결과 출력
+    # ==========================================================
+
+    print("\n========== 최신 중고 시세 ==========")
+    print(market_result)
+
+    print("\n========== 휴대폰 구매 가이드 ==========")
+    print(guide_result)
