@@ -131,3 +131,22 @@ def predict_price_range(features: dict) -> dict:
         "input_price": input_price,
         "classification": classification,
     }
+
+# 테스트
+if __name__ == "__main__":
+
+    sample = {
+        "brand": "Apple",
+        "model_family": "iPhone 14",
+        "generation_number": 14,
+        "storage": 128,
+        "condition": "3",
+        "battery_health": 92,
+        "input_price": 650000,
+    }
+
+    result = predict_price_range(sample)
+
+    print("===== Prediction Result =====")
+    for k, v in result.items():
+        print(f"{k}: {v}")
