@@ -104,10 +104,15 @@ def compare_models(X_train, X_test, y_train, y_test) -> dict:
     return results
 
 
-def save_model_artifact(model, feature_columns: list, residual_std: float, path: str = "models/price_model.pkl"):
-    """최종 모델 + 부가정보(feature_columns, residual_std)를 하나로 묶어서 저장"""
+def save_model_artifact(model, feature_columns: list, residual_std: float, default_values: dict = None, path: str = "models/price_model.pkl"):
+    """최종 모델 + 부가정보(feature_columns, residual_std, default_values)를 하나로 묶어서 저장"""
     joblib.dump(
-        {"model": model, "feature_columns": feature_columns, "residual_std": residual_std},
+        {
+            "model": model,
+            "feature_columns": feature_columns,
+            "residual_std": residual_std,
+            "default_values": default_values,
+        },
         path,
     )
     print(f"모델 저장 완료: {path}")
