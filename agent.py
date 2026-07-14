@@ -9,7 +9,10 @@ search_buying_guide() - file search, generate_result()
 # ==========================================================
 # 모듈 import (전부 파일 최상단에 모음)
 # ==========================================================
+import os
+
 import joblib
+from dotenv import load_dotenv
 from openai import OpenAI
 
 from preprocess import preprocess_input    # 팀원 구현 예정, 함수명/반환형태 확인 필요
@@ -19,12 +22,15 @@ from preprocess import preprocess_input    # 팀원 구현 예정, 함수명/반
 # 상수 / 클라이언트 / 모델 로드
 # ==========================================================
 
-# OpenAI API Client 생성
-client = OpenAI(api_key="YOUR_OPENAI_API_KEY")
+# .env 파일에서 환경변수 로드 (OPENAI_API_KEY 등)
+load_dotenv()
 
-# File Search에서 사용할 Vector Store ID
-# (휴대폰 구매 가이드 PDF 업로드 후 생성되는 ID)
-VECTOR_STORE_ID = "YOUR_VECTOR_STORE_ID"
+# OpenAI API Client 생성 - 환경변수에서 키를 불러와 사용 (하드코딩 금지)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# File Search에서 사용할 Vector Store ID (이것도 .env에서 관리하는 걸 추천)
+VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
 # 모델은 앱 실행 시 한 번만 로드
 MODEL_PATH = "models/price_model.pkl"
