@@ -261,22 +261,23 @@ print(result)
 # storage_gb, condition의 enum 값은 지금 내가 일반적인 아이폰 스토리지/상태 등급 기준으로 임의로 넣은 것. 
 # 실제 학습 데이터(train.py/전처리)에서 쓰는 카테고리 값이랑 반드시 똑같아야 하니까, 팀원한테 정확한 값 목록 확인해서 여기 맞춰야 함.
 
-# 사용자가 휴대폰 모델명을 입력
-product_name = input("휴대폰 모델명을 입력하세요 : ")
+if __name__ == "__main__":
+    # 사용자가 휴대폰 모델명을 입력
+    product_name = input("휴대폰 모델명을 입력하세요 : ")
 
-# 최신 중고 시세 검색
-market_result = search_market_price(product_name)
+    # 최신 중고 시세 검색
+    market_result = search_market_price(product_name)
 
-# 구매 가이드 검색
-guide_result = search_buying_guide(product_name)
+    # 구매 가이드 검색
+    guide_result = search_buying_guide(product_name)
 
 
-# ==========================================================
-# 결과 출력
-# ==========================================================
+    # ==========================================================
+    # 결과 출력
+    # ==========================================================
 
-print("\n========== 최신 중고 시세 ==========")
-print(market_result)
+    print("\n========== 최신 중고 시세 ==========")
+    print(market_result)
 
-print("\n========== 휴대폰 구매 가이드 ==========")
-print(guide_result)
+    print("\n========== 휴대폰 구매 가이드 ==========")
+    print(guide_result)
