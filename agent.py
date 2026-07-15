@@ -119,7 +119,7 @@ def orchestrate(user_message: str) -> str:
     # 커스텀 툴이랑 호스팅 툴 전달
     all_tools = tools + [
         {"type": "web_search_preview"},
-        {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
+        # {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
     ]
 
     # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임) 
@@ -176,16 +176,3 @@ if __name__ == "__main__":
     answer = orchestrate(user_message)
     print("\n========== 답변 ==========")
     print(answer)
-    
-    # # 사용자가 휴대폰 모델명을 입력
-    # product_name = input("휴대폰 모델명을 입력하세요 : ")
-    # # 최신 중고 시세 검색
-    # market_result = search_market_price(product_name)
-    # # 구매 가이드 검색
-    # guide_result = search_buying_guide(product_name)
-
-    # print("\n========== 최신 중고 시세 ==========")
-    # print(market_result)
-
-    # print("\n========== 휴대폰 구매 가이드 ==========")
-    # print(guide_result)
