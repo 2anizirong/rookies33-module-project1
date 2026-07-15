@@ -2,8 +2,10 @@
 agent.py
 
 <필요 함수>
-predict_price(), detect_anomaly(), search_market_price() - web search,
-search_buying_guide() - file search, generate_result()
+predict_price(), detect_anomaly(): predict.py 에서 import만 하기
+search_market_price() - web search
+search_buying_guide() - file search
+generate_result()
 """
 
 # ==========================================================
@@ -11,15 +13,14 @@ search_buying_guide() - file search, generate_result()
 # ==========================================================
 import os
 
-import joblib
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from preprocess import preprocess_input    # 팀원 구현 예정, 함수명/반환형태 확인 필요
-
+from predict import predict_price, detect_anomaly   # predict.py에서 가져오기 
+import json
 
 # ==========================================================
-# 상수 / 클라이언트 / 모델 로드
+# 상수 / 클라이언트 / 함수 호출
 # ==========================================================
 
 # .env 파일에서 환경변수 로드 (OPENAI_API_KEY 등)
@@ -32,170 +33,17 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # File Search에서 사용할 Vector Store ID (이것도 .env에서 관리하는 걸 추천)
 VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
-# 모델은 앱 실행 시 한 번만 로드
-MODEL_PATH = "models/price_model.pkl"
-model_data = joblib.load(MODEL_PATH)
-model = model_data["model"]
-feature_columns = model_data["feature_columns"]
+# 모델은 앱 실행 시 한 번만 로드 -> 이것도 predict.py에서 관여하기 
+# MODEL_PATH = "models/price_model.pkl"
+# model_data = joblib.load(MODEL_PATH)
+# model = model_data["model"]
+# feature_columns = model_data["feature_columns"]
 
-
-# ==========================================================
-# Web Search : 최신 중고 시세 검색
-# ==========================================================
-def search_market_price(product_name: str) -> str:
-
-    # GPT에게 전달할 프롬프트
-    prompt = f"""
-    '{product_name}'의 최신 중고 거래 시세를 검색해주세요.
-
-    다음 내용을 포함하여 알려주세요.
-
-    1. 최저 거래가
-    2. 평균 거래가
-    3. 최고 거래가
-    4. 최근 시세 동향
-    """
-
-    # OpenAI Web Search 실행
-    response = client.responses.create(
-        model="gpt-5",                          # gpt 버전 별로 강점이 있는 부분이 다 다름. 왜 이 버전을 사용하는 지 이유를 남겨 놓았으면 좋겠다는 의견이 있었음.
-        tools=[
-            {
-                "type": "web_search_preview"
-            }
-        ],
-        input=prompt
-    )
-
-    # 검색 결과 반환
-    return response.output_text
-
-
-# ==========================================================
-# File Search : 휴대폰 구매 가이드 검색
-# ==========================================================
-def search_buying_guide(product_name: str) -> str:
-
-    # GPT에게 전달할 프롬프트
-    prompt = f"""
-    내부 구매 가이드 문서를 참고하여
-    '{product_name}' 구매 시 확인해야 하는 사항을 알려주세요.
-
-    다음 항목에 대해서만 알려주세요.
-
-    1. 저장 용량 (128GB / 256GB / 512GB)
-    2. 배터리 성능(효율)
-    """
-
-    # OpenAI File Search 실행
-    response = client.responses.create(
-        model="gpt-5",
-        tools=[
-            {
-                "type": "file_search",
-                "vector_store_ids": [VECTOR_STORE_ID]
-            }
-        ],
-        input=prompt
-    )
-
-    # 검색 결과 반환
-    return response.output_text
-
-
-def predict_price(
-    title: str,          # 제품명 (예: iPhone 16 Pro)
-    storage_gb: int,     # 저장용량(GB)
-    condition: str       # 제품 상태 등급 (tools 스키마의 enum 값과 일치해야 함)
-) -> dict:
-    """
-    입력받은 아이폰 정보를 ML 모델에 전달하여 적정 중고가를 예측한다.
-    model, model_data는 모듈 최상단에서 joblib.load()로 1회 로드된 전역 객체를 사용.
-    """
-
-    # 1. 입력 데이터 전처리
-    # TODO: preprocess_input()이 title/storage_gb/condition을 feature_columns 구조에 맞는 원-핫 벡터로 변환해줘야 함 (팀원 확인 필요: title 그대로 넣는지, model_family로 정규화해서 넣는지)
-    # 주의: model.predict()는 2차원 입력을 기대하므로, features는 반드시 (1, feature 개수) 형태여야 함 (1차원이면 에러 발생)
-    features = preprocess_input(
-        title=title,
-        storage_gb=storage_gb,
-        condition=condition
-    )
-
-    # 2. 모델 예측 실행
-    # predict()는 배치 예측용이라 결과가 배열로 나옴 → 입력이 1건이므로 [0]으로 첫 값만 추출
-    predicted_price = model.predict(features)[0]
-
-    return {
-        # numpy 타입(float64 등)은 JSON 직렬화 시 에러날 수 있어 파이썬 기본 int로 캐스팅
-        "predicted_price": int(predicted_price),
-        # detect_anomaly()에서 이상 여부 판단 기준으로 사용될 모델 오차 표준편차
-        "residual_std": model_data["residual_std"]
-    }
-
-
-# detect_annomaly()
-def detect_anomaly(
-    predicted_price: int,   # predict_price()가 반환한 모델의 적정가 예측값(원)
-    selling_price: int,     # 사용자가 입력한 실제 판매 가격(원)
-    residual_std: float     # predict_price()가 함께 반환한 모델 오차의 표준편차(원)
-) -> dict:
-    # 예측가격과 판매가격을 비교하여 저가/적정가/고가 여부를 판단한다
-
-    # 방어 코드: 예측가 또는 판매가가 0 이하로 들어오면 나눗셈 및 비교 자체가 의미 없으므로 별도 에러 상태로 조기 리턴
-    if predicted_price <= 0 or selling_price <= 0:
-        return {
-            "status": "ERROR",
-            "message": "예측 가격 또는 판매 가격이 유효하지 않아 비교할 수 없습니다.",
-            "difference": None,
-            "difference_percent": None
-        }
-
-    # 판매가와 예측가의 차이 (양수면 판매가가 더 비쌈, 음수면 판매가가 더 쌈)
-    difference = selling_price - predicted_price
-
-    # 차이를 예측가 대비 퍼센트로 환산 (GPT가 사용자에게 설명할 때 사용하는 표시용 값)
-    percent = (difference / predicted_price) * 100
-
-    # 모델의 오차 표준편차(residual_std) 대비 몇 배 벗어났는지 계산
-    # 퍼센트 고정 임계값 대신 통계적 기준(표준편차)으로 이상 여부를 판단하기 위함
-    deviation = abs(difference) / residual_std
-
-    if deviation < 1:
-        # 모델 오차 범위 이내로 벗어남 → 정상적인 적정가 수준
-        status = "적정가"
-        message = "정상 거래 범위입니다."
-
-    elif difference < 0:
-        # 판매가가 예측가보다 낮은 경우 (차이가 음수)
-        if deviation < 2:
-            # 1σ ~ 2σ 사이로 낮음 → 약하게 저가
-            status = "저가"
-            message = "시세보다 다소 낮게 책정되어 있습니다."
-        else:
-            # 2σ 이상 낮음 → 강하게 저가, 허위매물(미끼상품) 의심
-            status = "저가"
-            message = "시세보다 크게 낮아 허위 매물 가능성이 있으니 주의하세요."
-
-    else:
-        # 판매가가 예측가보다 높은 경우 (차이가 양수)
-        if deviation < 2:
-            # 1σ ~ 2σ 사이로 높음 → 약하게 고가
-            status = "고가"
-            message = "시세보다 다소 높게 책정되어 있습니다."
-        else:
-            # 2σ 이상 높음 → 강하게 고가, 바가지 의심
-            status = "고가"
-            message = "시세보다 크게 높아 바가지 가능성이 있으니 주의하세요."
-
-    # 정상/저가/고가 모든 케이스에서 동일한 필드 구성을 유지
-    # (Streamlit이나 GPT 쪽에서 result["difference_percent"] 등으로 직접 접근해도 KeyError 안 나도록)
-    return {
-        "status": status,                        # "적정가" / "저가" / "고가" / "ERROR"
-        "message": message,                      # 사람이 읽을 설명 문구
-        "difference": difference,                # 판매가 - 예측가 (원 단위, 부호 있음)
-        "difference_percent": round(percent, 2)  # 예측가 대비 차이 비율(%)
-    }
+# 실제 함수 이름으로 함수 객체 매핑하기 (agent가 호출 요청하면 여기서 실행)
+AVAILABLE_FUNCTIONS = {
+    "predict_price": predict_price,
+    "detect_anomaly": detect_anomaly
+}
 
 # ==========================================================
 # Function Calling용 tools 정의
@@ -227,6 +75,7 @@ tools = [
                         "Used",
                         "Good - Refurbished",
                         "Very Good - Refurbished",
+                        "Excellent - Refurbished", 
                         "For Parts Or Not Working"
                     ]
                 }
@@ -262,45 +111,81 @@ tools = [
     }          
 ]
 
+# 사용자 메시지를 받아서
+# 에이전트한테 툴이랑 같이 해서 전달
+# 에이전트가 커스텀툴 (2개_predict_price랑 detect_anomaly) 호출 요청하면 실행해서 결과 에이전트에게 다시 돌려주기
+# 에이전트가 더 이상 함수 호출이 필요없으면 자연어로 출력해서 사용자에게 반환
+def orchestrate(user_message: str) -> str:
+    # 커스텀 툴이랑 호스팅 툴 전달
+    all_tools = tools + [
+        {"type": "web_search_preview"},
+        {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
+    ]
+
+    # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임) 
+    input_messages = [
+        {
+            "role": "user",
+            "content": user_message
+        }
+    ]
+
+    # 에이전트가 함수 호출을 계속 요청할 경우 -> 무한 루프로 처리
+    while True:
+        response = client.responses.create(
+            model="gpt-5",          # 모델은 위에 쓴 모델이랑 통일
+            tools=all_tools,
+            input=input_messages
+        )
+
+        # 웅답에 커스텀 함수 호출 부탁이 있었는지
+        function_calls = [item for item in response.output if item.type == "function_call"]
+        if not function_calls:
+            # 최종
+            return response.output_text
+        
+        # 이전 응답에 대화 기록 추가  
+        input_messages += response.output
+
+        # 이제 하나씩 실행
+        for call in function_calls:
+            func = AVAILABLE_FUNCTIONS.get(call.name)
+            if func is None:
+                result = {"error": f"알수 없는 함수 호출: {call.name}"}
+            else:
+                args = json.loads(call.arguments)
+                result = func(**args)
+            
+            # 함수 실행 결과를 대화 기록에 추가 (에이전트가 다음 턴에 이 결과를 보고 답변 생성)
+            input_messages.append({
+                "type": "function_call_output",
+                "call_id": call.call_id,
+                "output": json.dumps(result, ensure_ascii=False),
+            })
+
 
 # ==========================================================
 # 메인 실행부
 # ==========================================================
-
-# input_message = [
-#     {
-#         "role": "user",
-#         "content": "아이폰16 프로 256GB 상태 Excellent인데 120만원이면 괜찮아?"
-#     }
-# ]
-
-result = predict_price(
-    title="iPhone 16 Pro",
-    storage_gb=256,
-    condition="Very Good - Refurbished"
-)
-print(result)
-
 # storage_gb, condition의 enum 값은 지금 내가 일반적인 아이폰 스토리지/상태 등급 기준으로 임의로 넣은 것. 
 # 실제 학습 데이터(train.py/전처리)에서 쓰는 카테고리 값이랑 반드시 똑같아야 하니까, 팀원한테 정확한 값 목록 확인해서 여기 맞춰야 함.
 
 if __name__ == "__main__":
-    # 사용자가 휴대폰 모델명을 입력
-    product_name = input("휴대폰 모델명을 입력하세요 : ")
+    # --- 실제 서비스 진입점: orchestrate() 사용 ---
+    user_message = input("질문을 입력하세요 (예: 아이폰16프로 256GB Used 120만원이면 괜찮아?): ")
+    answer = orchestrate(user_message)
+    print("\n========== 답변 ==========")
+    print(answer)
+    
+    # # 사용자가 휴대폰 모델명을 입력
+    # product_name = input("휴대폰 모델명을 입력하세요 : ")
+    # # 최신 중고 시세 검색
+    # market_result = search_market_price(product_name)
+    # # 구매 가이드 검색
+    # guide_result = search_buying_guide(product_name)
 
-    # 최신 중고 시세 검색
-    market_result = search_market_price(product_name)
+    # print("\n========== 최신 중고 시세 ==========")
+    # print(market_result)
 
-    # 구매 가이드 검색
-    guide_result = search_buying_guide(product_name)
-
-
-    # ==========================================================
-    # 결과 출력
-    # ==========================================================
-
-    print("\n========== 최신 중고 시세 ==========")
-    print(market_result)
-
-    print("\n========== 휴대폰 구매 가이드 ==========")
-    print(guide_result)
+    # print("\n========== 휴대폰 구매 가이드 ==========")
+    # print(guide_result)
