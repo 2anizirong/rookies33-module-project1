@@ -58,7 +58,7 @@ def search_market_price(product_name: str) -> str:
 
     # OpenAI Web Search 실행
     response = client.responses.create(
-        model="gpt-5",
+        model="gpt-5",                          # gpt 버전 별로 강점이 있는 부분이 다 다름. 왜 이 버전을 사용하는 지 이유를 남겨 놓았으면 좋겠다는 의견이 있었음.
         tools=[
             {
                 "type": "web_search_preview"
@@ -103,45 +103,46 @@ def search_buying_guide(product_name: str) -> str:
     return response.output_text
 
 
-# predict_price()
-# ML 모델 호출
-# 입력받은 아이폰 정보를 ML 모델에 전달하여 적정 중고가를 반환한다.
-# 아이폰16프로 120만원이면 괜찮아??
-def predict_price(      # 제품명, 저장용량, 제품 상태를 이용하여 적정 중고가를 예측하는 함수
-    title: str,         
-    storage_gb: int,   
-    condition: str      
+def predict_price(
+    title: str,          # 제품명 (예: iPhone 16 Pro)
+    storage_gb: int,     # 저장용량(GB)
+    condition: str       # 제품 상태 등급 (tools 스키마의 enum 값과 일치해야 함)
 ) -> dict:
-    
-    # 입력 데이터 전처리
-    # TODO: preprocess_input()이 title/storage_gb/condition을
-    #       feature_columns(800+ 컬럼) 구조에 맞는 원-핫 벡터로 변환해줘야 함
-    #       (팀원 확인 필요: title 그대로 넣는지, model_family로 정규화해서 넣는지)
-   
+    """
+    입력받은 아이폰 정보를 ML 모델에 전달하여 적정 중고가를 예측한다.
+    model, model_data는 모듈 최상단에서 joblib.load()로 1회 로드된 전역 객체를 사용.
+    """
+
+    # 1. 입력 데이터 전처리
+    # TODO: preprocess_input()이 title/storage_gb/condition을 feature_columns 구조에 맞는 원-핫 벡터로 변환해줘야 함 (팀원 확인 필요: title 그대로 넣는지, model_family로 정규화해서 넣는지)
+    # 주의: model.predict()는 2차원 입력을 기대하므로, features는 반드시 (1, feature 개수) 형태여야 함 (1차원이면 에러 발생)
     features = preprocess_input(
         title=title,
         storage_gb=storage_gb,
         condition=condition
     )
-    
-    # 모델 예측 실행
+
+    # 2. 모델 예측 실행
+    # predict()는 배치 예측용이라 결과가 배열로 나옴 → 입력이 1건이므로 [0]으로 첫 값만 추출
     predicted_price = model.predict(features)[0]
 
     return {
+        # numpy 타입(float64 등)은 JSON 직렬화 시 에러날 수 있어 파이썬 기본 int로 캐스팅
         "predicted_price": int(predicted_price),
-        "residual_std": model_data["residual_std"]  # detect_anomaly()에서 사용
+        # detect_anomaly()에서 이상 여부 판단 기준으로 사용될 모델 오차 표준편차
+        "residual_std": model_data["residual_std"]
     }
 
 
 # detect_annomaly()
 def detect_anomaly(
-    predicted_price: int,
-    selling_price: int,
-    residual_std: float   # pkl에서 로드된 model_data["residual_std"] 사용 권장
+    predicted_price: int,   # predict_price()가 반환한 모델의 적정가 예측값(원)
+    selling_price: int,     # 사용자가 입력한 실제 판매 가격(원)
+    residual_std: float     # predict_price()가 함께 반환한 모델 오차의 표준편차(원)
 ) -> dict:
-    # 예측가격과 판매가격을 비교하여 이상 매물 여부를 판단한다
+    # 예측가격과 판매가격을 비교하여 저가/적정가/고가 여부를 판단한다
 
-    # 방어 코드: 예측가 또는 판매가가 유효하지 않으면 비교 자체가 불가능
+    # 방어 코드: 예측가 또는 판매가가 0 이하로 들어오면 나눗셈 및 비교 자체가 의미 없으므로 별도 에러 상태로 조기 리턴
     if predicted_price <= 0 or selling_price <= 0:
         return {
             "status": "ERROR",
@@ -150,29 +151,51 @@ def detect_anomaly(
             "difference_percent": None
         }
 
+    # 판매가와 예측가의 차이 (양수면 판매가가 더 비쌈, 음수면 판매가가 더 쌈)
     difference = selling_price - predicted_price
+
+    # 차이를 예측가 대비 퍼센트로 환산 (GPT가 사용자에게 설명할 때 사용하는 표시용 값)
     percent = (difference / predicted_price) * 100
 
-    # residual_std 기준: 모델 예측 오차의 표준편차 대비 몇 배 벗어났는지로 판단
+    # 모델의 오차 표준편차(residual_std) 대비 몇 배 벗어났는지 계산
+    # 퍼센트 고정 임계값 대신 통계적 기준(표준편차)으로 이상 여부를 판단하기 위함
     deviation = abs(difference) / residual_std
 
     if deviation < 1:
-        status = "NORMAL"
+        # 모델 오차 범위 이내로 벗어남 → 정상적인 적정가 수준
+        status = "적정가"
         message = "정상 거래 범위입니다."
-    elif deviation < 2:
-        status = "WARNING"
-        message = "시세와 다소 차이가 있습니다."
+
+    elif difference < 0:
+        # 판매가가 예측가보다 낮은 경우 (차이가 음수)
+        if deviation < 2:
+            # 1σ ~ 2σ 사이로 낮음 → 약하게 저가
+            status = "저가"
+            message = "시세보다 다소 낮게 책정되어 있습니다."
+        else:
+            # 2σ 이상 낮음 → 강하게 저가, 허위매물(미끼상품) 의심
+            status = "저가"
+            message = "시세보다 크게 낮아 허위 매물 가능성이 있으니 주의하세요."
+
     else:
-        status = "DANGER"
-        message = "허위 매물 가능성이 있으니 주의하세요."
+        # 판매가가 예측가보다 높은 경우 (차이가 양수)
+        if deviation < 2:
+            # 1σ ~ 2σ 사이로 높음 → 약하게 고가
+            status = "고가"
+            message = "시세보다 다소 높게 책정되어 있습니다."
+        else:
+            # 2σ 이상 높음 → 강하게 고가, 바가지 의심
+            status = "고가"
+            message = "시세보다 크게 높아 바가지 가능성이 있으니 주의하세요."
 
+    # 정상/저가/고가 모든 케이스에서 동일한 필드 구성을 유지
+    # (Streamlit이나 GPT 쪽에서 result["difference_percent"] 등으로 직접 접근해도 KeyError 안 나도록)
     return {
-        "status": status,
-        "message": message,
-        "difference": difference,
-        "difference_percent": round(percent, 2)
+        "status": status,                        # "적정가" / "저가" / "고가" / "ERROR"
+        "message": message,                      # 사람이 읽을 설명 문구
+        "difference": difference,                # 판매가 - 예측가 (원 단위, 부호 있음)
+        "difference_percent": round(percent, 2)  # 예측가 대비 차이 비율(%)
     }
-
 
 # ==========================================================
 # Function Calling용 tools 정의
@@ -215,7 +238,7 @@ tools = [
     {
         "type": "function",
         "name": "detect_anomaly",
-        "description": "predict_price()로 얻은 예측 가격(및 모델 오차 정보)과 사용자가 제시한 판매 가격을 비교하여 정상/주의/위험 여부를 판단한다.",
+        "description": "predict_price()로 얻은 예측 가격(및 모델 오차 정보)과 사용자가 제시한 판매 가격을 비교하여 저가/적정가/고가 여부를 판단한다.",
         "strict": True,
         "parameters": {
             "type": "object",
@@ -236,7 +259,7 @@ tools = [
             "required": ["predicted_price", "selling_price", "residual_std"],
             "additionalProperties": False
         }
-    }
+    }          
 ]
 
 
