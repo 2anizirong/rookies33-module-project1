@@ -16,6 +16,7 @@ import numpy as np
 import os
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.compose import TransformedTargetRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from xgboost import XGBRegressor
 import re
@@ -51,6 +52,12 @@ cat_cols = X.select_dtypes(include="object").columns.tolist()
 print("범주형 컬럼:", cat_cols)
 X = pd.get_dummies(X, columns=cat_cols, drop_first=True)
 
+# 모든 모델 공통 컬럼명 정리
+X.columns = [
+    re.sub(r"[\[\]<>]", "_", col)
+    for col in X.columns
+]
+
 print(X.shape)
 X.head()
 
@@ -70,19 +77,22 @@ print(X_train.isnull().sum()[X_train.isnull().sum() > 0])
 
 # %%
 # rf_model = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1) #: 1차 모델학습 파라미터
-rf_model = RandomForestRegressor(n_estimators=200,
-                                 max_depth= 11,
+base_rf = RandomForestRegressor(n_estimators=200,
+                                 max_depth= 9,
                                  min_samples_leaf=1,
                                   random_state=42,
                                   n_jobs=-1
                                   )
-rf_model.fit(X_train, y_train_log)
+rf_model = TransformedTargetRegressor( # 로그함수 자동 역변환
+    regressor=base_rf,
+    func=np.log1p,
+    inverse_func=np.expm1
+)
 
-train_preds_log = rf_model.predict(X_train) # 과적합 여부 판단을 위해 r2_train을 구함 
-test_preds_log = rf_model.predict(X_test)
+rf_model.fit(X_train, y_train)
 
-train_preds= np.expm1(train_preds_log)
-test_preds= np.expm1(test_preds_log)
+train_preds = rf_model.predict(X_train)
+test_preds = rf_model.predict(X_test)
 
 mae = mean_absolute_error(y_test, test_preds)
 mse = mean_squared_error(y_test, test_preds)
@@ -251,14 +261,12 @@ feature_columns = X_train.columns.tolist()
 # %%
 import joblib
 
-os.makedirs("../models", exist_ok=True)
+os.makedirs("models", exist_ok=True)
 
 joblib.dump({
     "model": final_model,
     "feature_columns": feature_columns,
     "residual_std": residual_std,
-}, "models/price_model_iphone_tuned.pkl")
+}, "models/price_model.pkl")
 
-print("저장 완료: models/price_model_iphone_tuned.pkl")
-
-
+print("저장 완료: models/price_model.pkl")
