@@ -269,4 +269,4 @@ joblib.dump({
     "residual_std": residual_std,
 }, "models/price_model.pkl")
 
-print("저장 완료: ../models/price_model.pkl")
+print("저장 완료: models/price_model.pkl")
