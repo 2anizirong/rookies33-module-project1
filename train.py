@@ -50,7 +50,7 @@ X.head()
 # 범주형 데이터 원핫인코딩 필요
 cat_cols = X.select_dtypes(include="object").columns.tolist()
 print("범주형 컬럼:", cat_cols)
-X = pd.get_dummies(X, columns=cat_cols, drop_first=False)
+X = pd.get_dummies(X, columns=cat_cols, drop_first=True)
 
 # 모든 모델 공통 컬럼명 정리
 X.columns = [
