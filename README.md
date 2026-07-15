@@ -48,7 +48,7 @@ SK쉴더스 루키즈 33기 모듈프로젝트1 (2026.07.13 ~ 07.20)
 pip install -r requirements.txt
 cp .env.example .env      # OPENAI_API_KEY 입력
 
-python preprocess.py       # 1. 데이터 전처리
+python preprocess.py data/raw/ebay_laptops_unclean.csv data/processed/ebay_laptops_clean_processed.csv       # 1. 데이터 전처리
 python train.py             # 2. 모델 학습 -> models/price_model.pkl 생성
 streamlit run app.py         # 3. 서비스 실행
 ```

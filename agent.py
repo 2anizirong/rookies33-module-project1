@@ -115,15 +115,16 @@ tools = [
 # 에이전트한테 툴이랑 같이 해서 전달
 # 에이전트가 커스텀툴 (2개_predict_price랑 detect_anomaly) 호출 요청하면 실행해서 결과 에이전트에게 다시 돌려주기
 # 에이전트가 더 이상 함수 호출이 필요없으면 자연어로 출력해서 사용자에게 반환
-def orchestrate(user_message: str) -> str:
+# refactor: 이전까지의 대화 기록 누적
+def orchestrate(user_message: str, conversation_history: list) -> tuple:
     # 커스텀 툴이랑 호스팅 툴 전달
     all_tools = tools + [
         {"type": "web_search_preview"},
         # {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
     ]
 
-    # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임) 
-    input_messages = [
+    # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임)
+    input_messages = conversation_history + [
         {
             "role": "user",
             "content": user_message
@@ -141,8 +142,9 @@ def orchestrate(user_message: str) -> str:
         # 웅답에 커스텀 함수 호출 부탁이 있었는지
         function_calls = [item for item in response.output if item.type == "function_call"]
         if not function_calls:
-            # 최종
-            return response.output_text
+            # 최종 답변도 기록에 추가
+            input_messages += response.output
+            return response.output_text, input_messages
         
         # 이전 응답에 대화 기록 추가  
         input_messages += response.output
@@ -150,11 +152,7 @@ def orchestrate(user_message: str) -> str:
         # 이제 하나씩 실행
         for call in function_calls:
             func = AVAILABLE_FUNCTIONS.get(call.name)
-            if func is None:
-                result = {"error": f"알수 없는 함수 호출: {call.name}"}
-            else:
-                args = json.loads(call.arguments)
-                result = func(**args)
+            result = func(**json.loads(call.arguments)) if func else {"error": f"알 수 없는 함수: {call.name}"}
             
             # 함수 실행 결과를 대화 기록에 추가 (에이전트가 다음 턴에 이 결과를 보고 답변 생성)
             input_messages.append({
@@ -171,8 +169,18 @@ def orchestrate(user_message: str) -> str:
 # 실제 학습 데이터(train.py/전처리)에서 쓰는 카테고리 값이랑 반드시 똑같아야 하니까, 팀원한테 정확한 값 목록 확인해서 여기 맞춰야 함.
 
 if __name__ == "__main__":
-    # --- 실제 서비스 진입점: orchestrate() 사용 ---
-    user_message = input("질문을 입력하세요 (예: 아이폰16프로 256GB Used 120만원이면 괜찮아?): ")
-    answer = orchestrate(user_message)
-    print("\n========== 답변 ==========")
-    print(answer)
+    # 대화 기록 누적
+    history = []
+    
+    while True:
+        user_message = input("질문을 입력하세요 (예: 아이폰16프로 256GB Used 120만원이면 괜찮아?): 아이폰16프로 256GB Used 120만원이면 괜찮아?):")
+
+        # "exit" 입력 시 종료 
+        if user_message.strip().lower() in ("exit"):
+            break
+
+        # history 계속 이어서 전달
+        answer, history = orchestrate(user_message, history)
+
+        print("==================== 답변 ====================")
+        print(answer)
