@@ -117,6 +117,9 @@ tools = [
 # 에이전트가 더 이상 함수 호출이 필요없으면 자연어로 출력해서 사용자에게 반환
 # refactor: 이전까지의 대화 기록 누적
 def orchestrate(user_message: str, conversation_history: list) -> tuple:
+    if conversation_history is None:
+        conversation_history = []
+
     # 커스텀 툴이랑 호스팅 툴 전달
     all_tools = tools + [
         {"type": "web_search_preview"},
