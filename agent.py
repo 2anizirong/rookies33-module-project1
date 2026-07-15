@@ -3,24 +3,23 @@ agent.py
 
 <필요 함수>
 predict_price(), detect_anomaly(): predict.py 에서 import만 하기
-search_market_price() - web search
-search_buying_guide() - file search
-generate_result()
+web_search / file_search: 호스팅 툴로 등록
+orchestrate(): 대화 오케스트레이션 (Function Calling 왕복 처리)
 """
 
 # ==========================================================
 # 모듈 import (전부 파일 최상단에 모음)
 # ==========================================================
+import json
 import os
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from predict import predict_price, detect_anomaly   # predict.py에서 가져오기 
-import json
+from predict import predict_price, detect_anomaly   # predict.py에서 가져오기
 
 # ==========================================================
-# 상수 / 클라이언트 / 함수 호출
+# 상수 / 클라이언트
 # ==========================================================
 
 # .env 파일에서 환경변수 로드 (OPENAI_API_KEY 등)
@@ -41,42 +40,80 @@ AVAILABLE_FUNCTIONS = {
 
 # ==========================================================
 # Function Calling용 tools 정의
+# enum 값들은 data/processed/ebay_laptops_clean_processed.csv 의 실제 카테고리 값 기준
+# (brand 33종 / model_family 48종 중 자주 나오는 것 위주로만 enum에 노출 -> 종류가 너무 많아서... 일단은 이렇게 처리를 해뒀는데.. 리팩토링 할 방법을 찾아보겠습니다.
+# 그 외 값은 자유 텍스트로 입력받아도 매핑 실패 시 자동으로 0 처리됨)
 # ==========================================================
 tools = [
     {
         "type": "function",
         "name": "predict_price",
-        "description": "입력받은 아이폰 정보를 기반으로 머신러닝 모델을 호출하여 적정 중고가를 예측한다.",
+        "description": "입력받은 중고 노트북 정보를 기반으로 머신러닝 모델을 호출하여 적정 중고가(달러)를 예측한다.",
         "strict": True,
         "parameters": {
             "type": "object",
             "properties": {
-                "title": {
+                "brand": {
                     "type": "string",
-                    "description": "제품명 (예: iPhone 16 Pro)"
+                    "description": "제조사",
+                    "enum": [
+                        "dell", "hp", "lenovo", "apple", "asus", "acer", "toshiba",
+                        "samsung", "msi", "microsoft", "sony", "panasonic", "gigabyte",
+                        "fujitsu", "lg", "razer", "other",
+                    ],
                 },
-                "storage_gb": {
-                    "type": "integer",
+                "model_family": {
+                    "type": "string",
+                    "description": "제품군 (예: thinkpad, macbook_pro, xps, latitude, ideapad, pavilion 등)",
+                },
+                "cpu_family": {
+                    "type": "string",
+                    "description": "CPU 등급",
+                    "enum": [
+                        "core_i3", "core_i5", "core_i7", "core_i9",
+                        "ryzen_3", "ryzen_5", "ryzen_7", "ryzen_9",
+                        "celeron", "pentium", "atom", "xeon",
+                        "apple_m1", "apple_m2", "apple_m3", "other", "unknown",
+                    ],
+                },
+                "ram_gb": {
+                    "type": "number",
+                    "description": "RAM 용량(GB)",
+                },
+                "storage_type": {
+                    "type": "string",
+                    "description": "저장장치 종류",
+                    "enum": ["ssd", "nvme_ssd", "hdd", "emmc", "hybrid", "unknown"],
+                },
+                "storage_capacity_gb": {
+                    "type": "number",
                     "description": "저장용량(GB)",
-                    "enum": [64, 128, 256, 512, 1024, 2048]
+                },
+                "screen_size_inch": {
+                    "type": "number",
+                    "description": "화면 크기(인치)",
+                },
+                "os": {
+                    "type": "string",
+                    "description": "운영체제",
+                    "enum": ["windows", "macos", "chrome_os", "linux", "android", "other", "unknown"],
                 },
                 "condition": {
                     "type": "string",
                     "description": "제품 상태 등급",
-                    "enum": [
-                        "New",
-                        "Open Box",
-                        "Used",
-                        "Good - Refurbished",
-                        "Very Good - Refurbished",
-                        "Excellent - Refurbished", 
-                        "For Parts Or Not Working"
-                    ]
-                }
+                    "enum": ["New", "Open Box", "Refurbished", "Used", "For Parts Or Not Working"],
+                },
+                "release_year": {
+                    "type": "integer",
+                    "description": "출시연도. 모르면 -1",
+                },
             },
-            "required": ["title", "storage_gb", "condition"],
-            "additionalProperties": False
-        }
+            "required": [
+                "brand", "model_family", "cpu_family", "ram_gb", "storage_type",
+                "storage_capacity_gb", "screen_size_inch", "os", "condition", "release_year",
+            ],
+            "additionalProperties": False,
+        },
     },
     {
         "type": "function",
@@ -88,44 +125,48 @@ tools = [
             "properties": {
                 "predicted_price": {
                     "type": "number",
-                    "description": "predict_price 함수가 반환한 예측 적정가(원)"
+                    "description": "predict_price 함수가 반환한 예측 적정가(달러)",
                 },
                 "selling_price": {
                     "type": "number",
-                    "description": "사용자가 제시한 실제 판매 가격(원)"
+                    "description": "사용자가 제시한 실제 판매 가격(달러)",
                 },
                 "residual_std": {
                     "type": "number",
-                    "description": "predict_price 함수가 반환한 모델 오차의 표준편차"
-                }
+                    "description": "predict_price 함수가 반환한 모델 오차의 표준편차",
+                },
             },
             "required": ["predicted_price", "selling_price", "residual_std"],
-            "additionalProperties": False
-        }
-    }          
+            "additionalProperties": False,
+        },
+    },
 ]
 
 # ==========================================================
 # 시스템 프롬프트 (에이전트 동작 규칙)
 # ==========================================================
 SYSTEM_PROMPT = """
-너는 중고 아이폰 가격 상담 어시스턴트야.
-
+너는 중고 노트북 가격 상담 어시스턴트야.
+ 
 규칙:
 1. 절대 네 지식만으로 가격을 추측하지 마.
-2. 제품명(title), 저장용량(storage_gb), 상태(condition)를 알게 되면 반드시 predict_price 함수를 호출해.
+2. 브랜드, 제품군, CPU, RAM, 저장장치, 화면크기, OS, 상태를 알게 되면 반드시 predict_price 함수를 호출해.
 3. 판매가(selling_price)까지 알게 되면 반드시 detect_anomaly 함수를 호출해서 저가/적정가/고가를 판정해.
-4. 이미 필수 정보(title, storage_gb, condition, selling_price)가 메시지에 다 있으면, 추가 질문 없이 바로 함수부터 호출해.
+4. 이미 필수 정보가 사용자 메시지에 다 있으면, 추가 질문 없이 바로 함수부터 호출해.
 5. 정말 필수 정보가 빠졌을 때만 되물어.
 6. 함수 호출 결과를 받으면, 그 결과를 근거로 최종 답변(적정가, 판정, 이유)을 제공하고 대화를 마무리해.
-7. 웹서치가 필요하면 최대 1~2번만 검색하고, 그 결과로 충분히 답변해. 여러 번 반복 검색하지 마.
-8. 최신 시세 동향이나 실시간 정보가 필요하면 web_search를 사용해.
-9. 구매 시 확인해야 할 체크리스트나 가이드가 필요하면 file_search를 사용해.
+7. 최신 시세 동향이나 실시간 정보가 필요하면 web_search를 사용하되, 최대 1~2번만 검색하고 그 결과로 답변해. 여러 번 반복 검색하지 마.
+8. 구매 시 확인해야 할 체크리스트나 가이드가 필요하면 file_search를 사용해.
+9. 가격 단위는 달러(USD)로 학습된 모델이니, 사용자가 원화로 물어보면 예측 결과를 대략적인 환율로 환산해서 안내해.
+10. 사용자가 시세 동향만 물어봐도, 스펙(브랜드/CPU/RAM/저장장치 등)을 알 수 있다면
+    predict_price도 함께 호출해서 우리 모델의 예측치와 웹 검색 결과를 같이 제시해.
+    이러면 사용자가 두 가지 관점(실제 매물 시세 vs 모델 예측 적정가)을 다 볼 수 있어.
 """
 
 # 사용자 메시지를 받아서
-# 에이전트한테 툴이랑 같이 해서 전달
-# 에이전트가 커스텀툴 (2개_predict_price랑 detect_anomaly) 호출 요청하면 실행해서 결과 에이전트에게 다시 돌려주기
+# 에이전트에게 tools(predict_price, detect_anomaly, web_search, file_search)와 함께 전달
+# 에이전트가 커스텀 함수(predict_price, detect_anomaly) 호출을 요청하면 우리가 직접 실행하고 결과를 다시 에이전트에게 돌려줌
+# (호스팅 툴 web_search/file_search는 OpenAI가 알아서 처리하므로 신경 안 써도 됨)
 # 에이전트가 더 이상 함수 호출이 필요없으면 자연어로 출력해서 사용자에게 반환
 # refactor: 이전까지의 대화 기록 누적
 def orchestrate(user_message: str, conversation_history: list) -> tuple:
@@ -142,12 +183,16 @@ def orchestrate(user_message: str, conversation_history: list) -> tuple:
         {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
     ]
 
-    # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임)
-    input_messages = conversation_history + [
-        # 이게 없으면 GPT가 함수 안 쓰고 알아서 답함
-        {"role": "developer", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_message}
-    ]
+    # 대화가 처음 시작될 때만 시스템 프롬프트를 맨 앞에 넣음
+    if not conversation_history:
+        # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임)
+        input_messages = conversation_history + [
+            # 이게 없으면 GPT가 함수 안 쓰고 알아서 답함
+            {"role": "developer", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message}
+        ]
+    else:
+        input_messages = conversation_history + [{"role": "user", "content": user_message}]
 
     # 반복 횟수 확인용
     round_num = 0
@@ -203,22 +248,17 @@ def orchestrate(user_message: str, conversation_history: list) -> tuple:
 # ==========================================================
 # 메인 실행부
 # ==========================================================
-# storage_gb, condition의 enum 값은 지금 내가 일반적인 아이폰 스토리지/상태 등급 기준으로 임의로 넣은 것. 
-# 실제 학습 데이터(train.py/전처리)에서 쓰는 카테고리 값이랑 반드시 똑같아야 하니까, 팀원한테 정확한 값 목록 확인해서 여기 맞춰야 함.
-
 if __name__ == "__main__":
-    # 대화 기록 누적
+    print("중고 노트북 가격 어시스턴트입니다. 종료하려면 'exit' 입력하세요.\n")
     history = []
-    
+ 
     while True:
-        user_message = input("질문을 입력하세요 (예: 아이폰16프로 256GB Used 120만원이면 괜찮아?): ")
-
-        # "exit" 입력 시 종료 
-        if user_message.strip().lower() in ("exit"):
+        user_message = input("질문을 입력하세요 (예: 델 래티튜드 i5 16GB 512GB SSD Used 50만원이면 괜찮아?): ")
+ 
+        if user_message.strip().lower() in ("exit", "quit", "종료"):
             break
-
-        # history 계속 이어서 전달
+ 
         answer, history = orchestrate(user_message, history)
-
+ 
         print("==================== 답변 ====================")
         print(answer)
