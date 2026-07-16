@@ -143,11 +143,14 @@ def orchestrate(user_message: str, conversation_history: list) -> tuple:
     ]
 
     # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임)
-    input_messages = conversation_history + [
-        # 이게 없으면 GPT가 함수 안 쓰고 알아서 답함
-        {"role": "developer", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_message}
-    ]
+    if not conversation_history:
+        input_messages = [
+            # 이게 없으면 GPT가 함수 안 쓰고 알아서 답함
+            {"role": "developer", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message}
+        ]
+    else:
+        input_messages = conversation_history + [{"role": "user", "content": user_message}]
 
     # 반복 횟수 확인용
     round_num = 0
