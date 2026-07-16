@@ -16,7 +16,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from predict import predict_price, detect_anomaly   # predict.py에서 가져오기
+from predict_laptop import predict_price, detect_anomaly   # predict_laptop.py에서 가져오기
 
 # ==========================================================
 # 상수 / 클라이언트
