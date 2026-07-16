@@ -6,22 +6,35 @@
 # - RandomForest / XGBoost / LinearRegression 성능 비교
 # - 최종 모델 + 부가정보(feature_columns, residual_std)를 models/price_model.pkl 로 저장
 
-# %%
+
 # 1. 라이브러리 불러오기
 import pandas as pd
 import numpy as np
 import os
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import joblib
 
-
-# %%
 # 2. 데이터셋 로드
 df = pd.read_csv('data/processed/0715ebay_laptops_model_ready_v1.csv')
 
+print(f'데이터 구성: {df.shape}')
+print(f"\n변수 타입 및 결측치 확인")
+print({df.info()})
+
+print(df['price_usd'].describe())
+
+numeric_df = df.select_dtypes(include=['number'])
+
+# 상관관계 히트맵 (Correlation Heatmap)
+plt.figure(figsize=(10, 8))
+sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
+plt.title('Correlation Heatmap Matrix')
+plt.show()
 # %%
 X = df.drop(columns=["price_usd"])
 y = df["price_usd"]

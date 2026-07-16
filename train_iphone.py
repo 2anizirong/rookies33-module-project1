@@ -14,6 +14,9 @@
 import pandas as pd
 import numpy as np
 import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.compose import TransformedTargetRegressor
@@ -26,11 +29,20 @@ from sklearn.linear_model import LinearRegression
 # RandomForest
 
 # %%
-df = pd.read_csv('data/processed/iphone_test.csv')
+df = pd.read_csv('data/processed/iphone_clean_processed.csv')
 print(df.shape)
 print(df.columns.tolist())
 print(df.dtypes)
 df.head()
+
+
+# numeric_df = df.select_dtypes(include=['number'])
+
+# # 상관관계 히트맵 (Correlation Heatmap)
+# plt.figure(figsize=(10, 8))
+# sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
+# plt.title('Correlation Heatmap Matrix')
+# plt.show()
 
 # %% [markdown]
 # Train/Test 분리 + 전처리 확인
@@ -77,17 +89,21 @@ print(X_train.isnull().sum()[X_train.isnull().sum() > 0])
 
 # %%
 # rf_model = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1) #: 1차 모델학습 파라미터
-base_rf = RandomForestRegressor(n_estimators=200,
-                                 max_depth= 9,
-                                 min_samples_leaf=1,
-                                  random_state=42,
-                                  n_jobs=-1
-                                  )
+
+base_rf = RandomForestRegressor(
+    n_estimators=200,        
+    max_depth=9,          
+    min_samples_leaf=1,              
+    random_state=42,
+    n_jobs=-1
+)
 rf_model = TransformedTargetRegressor( # 로그함수 자동 역변환
     regressor=base_rf,
     func=np.log1p,
     inverse_func=np.expm1
 )
+
+
 
 rf_model.fit(X_train, y_train)
 
@@ -132,11 +148,13 @@ print(f'R2_Gap :{r2_train-r2_test:.3f}')
 # ### 하이퍼파라미터 튜닝 실험결과
 # 
 # 실험 1차 결과 => 기본
-# - RF_R2: 0.543
-# - RF_R2_train: 0.808
-# - R2_Gap :0.265
-# - 상태 : 과적합
-# - 방향성 : max_depth로 질문개수 정해주기, 기본 무제한으로 되어 있어 과한 학습이 일어남
+# RF_MAE: 121.43745249595051
+# RF_MSE: 131474.1940341905
+# RF_RMSE: 362.5937037983292
+# RF_R2: 0.429
+# RF_R2_train: 0.539
+# R2_Gap :0.110
+# R2 값이 너무 낮음 신뢰성이 없음
 # 
 # 
 # 실험 2차 결과 => max_depth = 10 추가 
