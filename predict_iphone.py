@@ -37,7 +37,7 @@ def _get_model():
 
 # iphone 16 pro 이런 식으로 자유롭게 사용자에게서 입력 받은 텍스트 제품명에서 model_family / generation_number / is_pro 를 추출
 # train.py 전처리 단계 -> train에서 전처리를 하나...? 데이터 전처리에서 하는 거 아닌가? 무튼 전처리 단계에서 이 값들을 실제로 어떻게 만들었는지와 같은 규칙이어야 함..
-def _parse_title(title: str) -> str:
+def _parse_title(title: str) -> dict:
     match = re.search(r"iPhone\s*(\d+)", title, re.IGNORECASE)
 
     generation_number = int(match.group(1)) if match else None
@@ -135,7 +135,7 @@ def detect_anomaly(
     """
 
     # 방어 코드: 예측가 또는 판매가가 0 이하면 비교 자체가 의미 없으므로 조기 리턴
-    if predicted_price <= 0 or selling_price <= 0:
+    if predicted_price <= 0 or selling_price <= 0 or residual_std <= 0:
         return {
             "status": "ERROR",
             "message": "예측 가격 또는 판매 가격이 유효하지 않아 비교할 수 없습니다.",

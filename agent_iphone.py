@@ -217,7 +217,7 @@ if __name__ == "__main__":
         user_message = input("질문을 입력하세요 (예: 아이폰16프로 256GB Used 120만원이면 괜찮아?): ")
 
         # "exit" 입력 시 종료 
-        if user_message.strip().lower() in ("exit"):
+        if user_message.strip().lower() == "exit":
             break
 
         # history 계속 이어서 전달
