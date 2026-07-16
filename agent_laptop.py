@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from predict_laptop import predict_price_laptop, detect_anomaly   # predict_laptop.py에서 가져오기
+from currency import convert_currency       # currency.py 에서 환율 계산 가져오기 
 
 # ==========================================================
 # 상수 / 클라이언트
@@ -35,7 +36,8 @@ VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 # 실제 함수 이름으로 함수 객체 매핑하기 (agent가 호출 요청하면 여기서 실행)
 AVAILABLE_FUNCTIONS = {
     "predict_price_laptop": predict_price_laptop,
-    "detect_anomaly": detect_anomaly
+    "detect_anomaly": detect_anomaly,
+    "convert_currency": convert_currency,
 }
 
 # ==========================================================
@@ -140,6 +142,35 @@ tools = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "convert_currency",
+        "description": "USD와 KRW 사이의 금액을 최신 환율로 변환한다.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "description": "변환할 금액"
+                },
+                "from_currency": {
+                    "type": "string",
+                    "enum": ["USD", "KRW"]
+                },
+                "to_currency": {
+                    "type": "string",
+                    "enum": ["USD", "KRW"]
+                }
+            },
+            "required": [
+                "amount",
+                "from_currency",
+                "to_currency"
+            ],
+            "additionalProperties": False
+        }
+    },
 ]
 
 # ==========================================================
@@ -157,7 +188,8 @@ SYSTEM_PROMPT = """
 6. 함수 호출 결과를 받으면, 그 결과를 근거로 최종 답변(적정가, 판정, 이유)을 제공하고 대화를 마무리해.
 7. 최신 시세 동향이나 실시간 정보가 필요하면 web_search를 사용하되, 최대 1~2번만 검색하고 그 결과로 답변해. 여러 번 반복 검색하지 마.
 8. 구매 시 확인해야 할 체크리스트나 가이드가 필요하면 file_search를 사용해.
-9. 가격 단위는 달러(USD)로 학습된 모델이니, 사용자가 원화로 물어보면 예측 결과를 대략적인 환율로 환산해서 안내해.
+9. 가격 단위는 USD로 학습된 모델이야. 사용자가 한국어를 사용하면 반드시 convert_currency 함수를 호출하여 환율을 계산한 뒤 안내해.
+절대로 자체적으로 환율을 추정하지 않는다.
 10. 사용자가 시세 동향만 물어봐도, 스펙(브랜드/CPU/RAM/저장장치 등)을 알 수 있다면
     predict_price_laptop도 함께 호출해서 우리 모델의 예측치와 웹 검색 결과를 같이 제시해.
     이러면 사용자가 두 가지 관점(실제 매물 시세 vs 모델 예측 적정가)을 다 볼 수 있어.
