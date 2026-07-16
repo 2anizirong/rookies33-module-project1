@@ -119,7 +119,7 @@ def orchestrate(user_message: str) -> str:
     # 커스텀 툴이랑 호스팅 툴 전달
     all_tools = tools + [
         {"type": "web_search_preview"},
-        # {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
+         {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
     ]
 
     # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임) 
