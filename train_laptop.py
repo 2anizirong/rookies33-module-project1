@@ -96,8 +96,10 @@ print(f"\nresidual_std: {residual_std}")
 
 # %%
 # 9. predict.py에서 인코딩을 똑같이 맞추기 위해 학습 때 쓴 컬럼 목록도 저장
-feature_columns = oh_encoder.get_feature_names_out(cat_cols).tolist()
-
+feature_columns = (
+    num_cols +
+    oh_encoder.get_feature_names_out(cat_cols).tolist()
+)
 # %%
 # 10. 모델 저장
 # 현재 폴더에 models 폴더가 없으면 만듬
