@@ -198,13 +198,14 @@ X_test.columns = [re.sub(r"[\[\]<>]", "_", col) for col in X_test.columns]
 
 xgb_model.fit(X_train, y_train)
 xgb_preds = xgb_model.predict(X_test)
+xgb_train_preds = xgb_model.predict(X_train)
 
 xgb_mae = mean_absolute_error(y_test, xgb_preds)
 xgb_mse = mean_squared_error(y_test, xgb_preds)
 xgb_rmse = np.sqrt(mean_squared_error(y_test, xgb_preds))
 xgb_r2 = r2_score(y_test, xgb_preds)
 
-print("===== XGBoost =====")
+print("\n===== XGBoost =====")
 print(f"XGB_MAE: {xgb_mae}")
 print(f"XGB_MSE: {xgb_mse}")
 print(f"XGB_RMSE: {xgb_rmse}")
@@ -232,18 +233,16 @@ lr_mae = mean_absolute_error(y_test, lr_preds)
 lr_rmse = np.sqrt(mean_squared_error(y_test, lr_preds))
 lr_r2 = r2_score(y_test, lr_preds)
 
-print("===== LinearRegression =====")
+print("\n===== LinearRegression =====")
 print(f"LR_MAE: {lr_mae}")
 print(f"LR_RMSE: {lr_rmse}")
 print(f"LR_R2: {lr_r2}")
 
 # %%
 # 확인해보기
-print(df["model_family"].nunique())
-print(df["generation_number"].nunique())
+
 
 # %%
-print(df.shape)
 
 # %%
 # 최종 모델 선택 (여기선 RandomForest 예시)
@@ -267,6 +266,6 @@ joblib.dump({
     "model": final_model,
     "feature_columns": feature_columns,
     "residual_std": residual_std,
-}, "models/price_model.pkl")
+}, "models/price_model_iphone.pkl")
 
-print("저장 완료: models/price_model.pkl")
+print("\n저장 완료: models/price_model_iphone.pkl")
