@@ -2,7 +2,7 @@
 agent.py
 
 <필요 함수>
-predict_price(), detect_anomaly(): predict.py 에서 import만 하기
+predict_price_laptop(), detect_anomaly(): predict.py 에서 import만 하기
 web_search / file_search: 호스팅 툴로 등록
 orchestrate(): 대화 오케스트레이션 (Function Calling 왕복 처리)
 """
@@ -16,7 +16,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from predict_laptop import predict_price, detect_anomaly   # predict_laptop.py에서 가져오기
+from predict_laptop import predict_price_laptop, detect_anomaly   # predict_laptop.py에서 가져오기
 
 # ==========================================================
 # 상수 / 클라이언트
@@ -34,7 +34,7 @@ VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
 # 실제 함수 이름으로 함수 객체 매핑하기 (agent가 호출 요청하면 여기서 실행)
 AVAILABLE_FUNCTIONS = {
-    "predict_price": predict_price,
+    "predict_price_laptop": predict_price_laptop,
     "detect_anomaly": detect_anomaly
 }
 
@@ -47,7 +47,7 @@ AVAILABLE_FUNCTIONS = {
 tools = [
     {
         "type": "function",
-        "name": "predict_price",
+        "name": "predict_price_laptop",
         "description": "입력받은 중고 노트북 정보를 기반으로 머신러닝 모델을 호출하여 적정 중고가(달러)를 예측한다.",
         "strict": True,
         "parameters": {
@@ -118,14 +118,14 @@ tools = [
     {
         "type": "function",
         "name": "detect_anomaly",
-        "description": "predict_price()로 얻은 예측 가격(및 모델 오차 정보)과 사용자가 제시한 판매 가격을 비교하여 저가/적정가/고가 여부를 판단한다.",
+        "description": "predict_price_laptop()로 얻은 예측 가격(및 모델 오차 정보)과 사용자가 제시한 판매 가격을 비교하여 저가/적정가/고가 여부를 판단한다.",
         "strict": True,
         "parameters": {
             "type": "object",
             "properties": {
                 "predicted_price": {
                     "type": "number",
-                    "description": "predict_price 함수가 반환한 예측 적정가(달러)",
+                    "description": "predict_price_laptop 함수가 반환한 예측 적정가(달러)",
                 },
                 "selling_price": {
                     "type": "number",
@@ -133,7 +133,7 @@ tools = [
                 },
                 "residual_std": {
                     "type": "number",
-                    "description": "predict_price 함수가 반환한 모델 오차의 표준편차",
+                    "description": "predict_price_laptop 함수가 반환한 모델 오차의 표준편차",
                 },
             },
             "required": ["predicted_price", "selling_price", "residual_std"],
@@ -150,7 +150,7 @@ SYSTEM_PROMPT = """
  
 규칙:
 1. 절대 네 지식만으로 가격을 추측하지 마.
-2. 브랜드, 제품군, CPU, RAM, 저장장치, 화면크기, OS, 상태를 알게 되면 반드시 predict_price 함수를 호출해.
+2. 브랜드, 제품군, CPU, RAM, 저장장치, 화면크기, OS, 상태를 알게 되면 반드시 predict_price_laptop 함수를 호출해.
 3. 판매가(selling_price)까지 알게 되면 반드시 detect_anomaly 함수를 호출해서 저가/적정가/고가를 판정해.
 4. 이미 필수 정보가 사용자 메시지에 다 있으면, 추가 질문 없이 바로 함수부터 호출해.
 5. 정말 필수 정보가 빠졌을 때만 되물어.
@@ -159,13 +159,13 @@ SYSTEM_PROMPT = """
 8. 구매 시 확인해야 할 체크리스트나 가이드가 필요하면 file_search를 사용해.
 9. 가격 단위는 달러(USD)로 학습된 모델이니, 사용자가 원화로 물어보면 예측 결과를 대략적인 환율로 환산해서 안내해.
 10. 사용자가 시세 동향만 물어봐도, 스펙(브랜드/CPU/RAM/저장장치 등)을 알 수 있다면
-    predict_price도 함께 호출해서 우리 모델의 예측치와 웹 검색 결과를 같이 제시해.
+    predict_price_laptop도 함께 호출해서 우리 모델의 예측치와 웹 검색 결과를 같이 제시해.
     이러면 사용자가 두 가지 관점(실제 매물 시세 vs 모델 예측 적정가)을 다 볼 수 있어.
 """
 
 # 사용자 메시지를 받아서
-# 에이전트에게 tools(predict_price, detect_anomaly, web_search, file_search)와 함께 전달
-# 에이전트가 커스텀 함수(predict_price, detect_anomaly) 호출을 요청하면 우리가 직접 실행하고 결과를 다시 에이전트에게 돌려줌
+# 에이전트에게 tools(predict_price_laptop, detect_anomaly, web_search, file_search)와 함께 전달
+# 에이전트가 커스텀 함수(predict_price_laptop, detect_anomaly) 호출을 요청하면 우리가 직접 실행하고 결과를 다시 에이전트에게 돌려줌
 # (호스팅 툴 web_search/file_search는 OpenAI가 알아서 처리하므로 신경 안 써도 됨)
 # 에이전트가 더 이상 함수 호출이 필요없으면 자연어로 출력해서 사용자에게 반환
 # refactor: 이전까지의 대화 기록 누적
@@ -204,7 +204,7 @@ def orchestrate(user_message: str, conversation_history: list) -> tuple:
         print(f"[디버그] 지금까지 쌓인 input_messages 개수: {len(input_messages)}")
 
         response = client.responses.create(
-            model="gpt-5",          # 모델은 위에 쓴 모델이랑 통일
+            model="gpt-5.5",          # 모델 수정 5 -> 5.5
             tools=all_tools,
             input=input_messages,
         )
