@@ -12,13 +12,10 @@
 """
 
 
+import argparse
 import csv
 import re
 from pathlib import Path
-
-
-SOURCE = Path(r"C:\Users\User\Downloads\ecommerce_iphone_resale_market_intelligence_usa_2026.csv")
-OUTPUT = Path(__file__).with_name("iphone_clean_processed.csv")
 
 # 상품 상태를 좋은 상태(7점)부터 부품용(1점)까지 순서형 점수로 변환한다.
 CONDITION_SCORES = {
@@ -95,36 +92,72 @@ def extract_color(title: str) -> str:
     return match.group(0).lower() if match else "unknown"
 
 
-# 원본 CSV를 한 행씩 읽어 메모리 사용량을 줄인다.
-with SOURCE.open("r", encoding="utf-8-sig", newline="") as source:
-    reader = csv.DictReader(source)
+def main() -> None:
+    """명령줄에서 받은 원본 CSV를 전처리하여 지정한 경로에 저장한다."""
+    parser = argparse.ArgumentParser(
+        description="Preprocess iPhone resale data for model training"
+    )
+    parser.add_argument("input_csv", type=Path, help="전처리할 원본 CSV 경로")
+    parser.add_argument("output_csv", type=Path, help="전처리 결과 CSV 경로")
+    args = parser.parse_args()
 
-    # Excel에서도 한글이 깨지지 않도록 UTF-8 BOM 형식으로 저장한다.
-    with OUTPUT.open("w", encoding="utf-8-sig", newline="") as output:
-        writer = csv.DictWriter(output, fieldnames=OUTPUT_FIELDS)
-        writer.writeheader()
+    # 입력 파일과 필수 헤더가 있는지 실행 초기에 확인한다.
+    if not args.input_csv.is_file():
+        parser.error(f"입력 파일을 찾을 수 없습니다: {args.input_csv}")
 
-        for row in reader:
-            # 숫자형 저장공간을 우선 사용하고, 비어 있으면 제목에서 복구한다.
-            storage = compact_number(row.get("storage_gb_numeric", ""))
-            if not storage:
-                storage = recover_storage(row.get("title", ""))
+    # 출력 폴더가 없으면 자동으로 생성한다.
+    args.output_csv.parent.mkdir(parents=True, exist_ok=True)
+    written_rows = 0
 
-            # 저장공간을 확실하게 알 수 없는 행은 모델 학습 데이터에서 제거한다.
-            if not storage:
-                continue
+    # 원본 CSV를 한 행씩 읽어 메모리 사용량을 줄인다.
+    with args.input_csv.open("r", encoding="utf-8-sig", newline="") as source:
+        reader = csv.DictReader(source)
+        required_fields = {
+            "title",
+            "model_family",
+            "generation_number",
+            "is_pro",
+            "storage_gb_numeric",
+            "condition",
+            "price",
+        }
+        missing_fields = required_fields.difference(reader.fieldnames or [])
+        if missing_fields:
+            raise ValueError(
+                "원본 CSV에 필수 컬럼이 없습니다: " + ", ".join(sorted(missing_fields))
+            )
 
-            # 필요한 원본값과 새로 만든 파생변수만 최종 행에 담는다.
-            cleaned = {
-                "model_family": row.get("model_family", ""),
-                "generation_number": row.get("generation_number", ""),
-                "is_pro": row.get("is_pro", ""),
-                "storage_gb": storage,
-                "condition": row.get("condition", ""),
-                "condition_score": CONDITION_SCORES.get(row.get("condition", ""), ""),
-                "price": row.get("price", ""),
-                "color": extract_color(row.get("title", "")),
-            }
-            writer.writerow(cleaned)
+        # Excel에서도 한글이 깨지지 않도록 UTF-8 BOM 형식으로 저장한다.
+        with args.output_csv.open("w", encoding="utf-8-sig", newline="") as output:
+            writer = csv.DictWriter(output, fieldnames=OUTPUT_FIELDS)
+            writer.writeheader()
 
-print(f"Created: {OUTPUT}")
+            for row in reader:
+                # 숫자형 저장공간을 우선 사용하고, 비어 있으면 제목에서 복구한다.
+                storage = compact_number(row.get("storage_gb_numeric", ""))
+                if not storage:
+                    storage = recover_storage(row.get("title", ""))
+
+                # 저장공간을 확실하게 알 수 없는 행은 모델 학습 데이터에서 제거한다.
+                if not storage:
+                    continue
+
+                # 필요한 원본값과 새로 만든 파생변수만 최종 행에 담는다.
+                cleaned = {
+                    "model_family": row.get("model_family", ""),
+                    "generation_number": row.get("generation_number", ""),
+                    "is_pro": row.get("is_pro", ""),
+                    "storage_gb": storage,
+                    "condition": row.get("condition", ""),
+                    "condition_score": CONDITION_SCORES.get(row.get("condition", ""), ""),
+                    "price": row.get("price", ""),
+                    "color": extract_color(row.get("title", "")),
+                }
+                writer.writerow(cleaned)
+                written_rows += 1
+
+    print(f"Wrote {written_rows:,} rows to {args.output_csv}")
+
+
+if __name__ == "__main__":
+    main()
