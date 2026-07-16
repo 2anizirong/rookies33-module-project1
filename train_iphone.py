@@ -26,7 +26,7 @@ from sklearn.linear_model import LinearRegression
 # RandomForest
 
 # %%
-df = pd.read_csv('data/processed/iphone_test.csv')
+df = pd.read_csv('data/processed/iphone_clean_processed.csv')
 print(df.shape)
 print(df.columns.tolist())
 print(df.dtypes)
