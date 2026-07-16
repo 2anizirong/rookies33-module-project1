@@ -135,7 +135,7 @@ def detect_anomaly(
     """
 
     # 방어 코드: 예측가 또는 판매가가 0 이하면 비교 자체가 의미 없으므로 조기 리턴
-    if predicted_price <= 0 or selling_price <= 0:
+    if predicted_price <= 0 or selling_price <= 0 or residual_std <= 0:
         return {
             "status": "ERROR",
             "message": "예측 가격 또는 판매 가격이 유효하지 않아 비교할 수 없습니다.",
