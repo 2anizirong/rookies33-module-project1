@@ -6,22 +6,35 @@
 # - RandomForest / XGBoost / LinearRegression 성능 비교
 # - 최종 모델 + 부가정보(feature_columns, residual_std)를 models/price_model.pkl 로 저장
 
-# %%
+
 # 1. 라이브러리 불러오기
 import pandas as pd
 import numpy as np
 import os
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import joblib
 
-
-# %%
 # 2. 데이터셋 로드
 df = pd.read_csv('data/processed/0715ebay_laptops_model_ready_v1.csv')
 
+print(f'데이터 구성: {df.shape}')
+print(f"\n변수 타입 및 결측치 확인")
+print({df.info()})
+
+print(df['price_usd'].describe())
+
+numeric_df = df.select_dtypes(include=['number'])
+
+# 상관관계 히트맵 (Correlation Heatmap)
+plt.figure(figsize=(10, 8))
+sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
+plt.title('Correlation Heatmap Matrix')
+plt.show()
 # %%
 X = df.drop(columns=["price_usd"])
 y = df["price_usd"]
@@ -83,8 +96,10 @@ print(f"\nresidual_std: {residual_std}")
 
 # %%
 # 9. predict.py에서 인코딩을 똑같이 맞추기 위해 학습 때 쓴 컬럼 목록도 저장
-feature_columns = oh_encoder.get_feature_names_out(cat_cols).tolist()
-
+feature_columns = (
+    num_cols +
+    oh_encoder.get_feature_names_out(cat_cols).tolist()
+)
 # %%
 # 10. 모델 저장
 # 현재 폴더에 models 폴더가 없으면 만듬
