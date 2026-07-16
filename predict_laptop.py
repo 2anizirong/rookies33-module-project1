@@ -67,7 +67,7 @@ def _get_model():
     global _model
     if _model is None:
         # 처음 호출될 때만 실제로 디스크에서 파일을 읽어옴
-        _model = joblib.load("models/price_model.pkl")
+        _model = joblib.load("models/price_model_laptop.pkl")
     return _model
 
 # 사용자가 입력한 raw 값을 모델 학습 시 사용된 feature_columns에 맞춰 직접 매핑하는 함수
