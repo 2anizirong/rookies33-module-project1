@@ -2,7 +2,7 @@
 agent.py
 
 <필요 함수>
-predict_price(), detect_anomaly(): predict.py 에서 import만 하기
+predict_price_iphone(), detect_anomaly(): predict.py 에서 import만 하기
 search_market_price() - web search
 search_buying_guide() - file search
 generate_result()
@@ -16,7 +16,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from predict_iphone import predict_price, detect_anomaly   # predict_iphone.py에서 가져오기 
+from predict_iphone import predict_price_iphone, detect_anomaly   # predict_iphone.py에서 가져오기 
 import json
 
 # ==========================================================
@@ -35,7 +35,7 @@ VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
 # 실제 함수 이름으로 함수 객체 매핑하기 (agent가 호출 요청하면 여기서 실행)
 AVAILABLE_FUNCTIONS = {
-    "predict_price": predict_price,
+    "predict_price_iphone": predict_price_iphone,
     "detect_anomaly": detect_anomaly
 }
 
@@ -45,7 +45,7 @@ AVAILABLE_FUNCTIONS = {
 tools = [
     {
         "type": "function",
-        "name": "predict_price",
+        "name": "predict_price_iphone",
         "description": "입력받은 아이폰 정보를 기반으로 머신러닝 모델을 호출하여 적정 중고가를 예측한다.",
         "strict": True,
         "parameters": {
@@ -81,14 +81,14 @@ tools = [
     {
         "type": "function",
         "name": "detect_anomaly",
-        "description": "predict_price()로 얻은 예측 가격(및 모델 오차 정보)과 사용자가 제시한 판매 가격을 비교하여 저가/적정가/고가 여부를 판단한다.",
+        "description": "predict_price_iphone()로 얻은 예측 가격(및 모델 오차 정보)과 사용자가 제시한 판매 가격을 비교하여 저가/적정가/고가 여부를 판단한다.",
         "strict": True,
         "parameters": {
             "type": "object",
             "properties": {
                 "predicted_price": {
                     "type": "number",
-                    "description": "predict_price 함수가 반환한 예측 적정가(원)"
+                    "description": "predict_price_iphone 함수가 반환한 예측 적정가(원)"
                 },
                 "selling_price": {
                     "type": "number",
@@ -96,7 +96,7 @@ tools = [
                 },
                 "residual_std": {
                     "type": "number",
-                    "description": "predict_price 함수가 반환한 모델 오차의 표준편차"
+                    "description": "predict_price_iphone 함수가 반환한 모델 오차의 표준편차"
                 }
             },
             "required": ["predicted_price", "selling_price", "residual_std"],
@@ -113,7 +113,7 @@ SYSTEM_PROMPT = """
 
 규칙:
 1. 절대 네 지식만으로 가격을 추측하지 마.
-2. 제품명(title), 저장용량(storage_gb), 상태(condition)를 알게 되면 반드시 predict_price 함수를 호출해.
+2. 제품명(title), 저장용량(storage_gb), 상태(condition)를 알게 되면 반드시 predict_price_iphone 함수를 호출해.
 3. 판매가(selling_price)까지 알게 되면 반드시 detect_anomaly 함수를 호출해서 저가/적정가/고가를 판정해.
 4. 이미 필수 정보(title, storage_gb, condition, selling_price)가 메시지에 다 있으면, 추가 질문 없이 바로 함수부터 호출해.
 5. 정말 필수 정보가 빠졌을 때만 되물어.
@@ -125,7 +125,7 @@ SYSTEM_PROMPT = """
 
 # 사용자 메시지를 받아서
 # 에이전트한테 툴이랑 같이 해서 전달
-# 에이전트가 커스텀툴 (2개_predict_price랑 detect_anomaly) 호출 요청하면 실행해서 결과 에이전트에게 다시 돌려주기
+# 에이전트가 커스텀툴 (2개_predict_price_iphone랑 detect_anomaly) 호출 요청하면 실행해서 결과 에이전트에게 다시 돌려주기
 # 에이전트가 더 이상 함수 호출이 필요없으면 자연어로 출력해서 사용자에게 반환
 # refactor: 이전까지의 대화 기록 누적
 def orchestrate(user_message: str, conversation_history: list) -> tuple:
@@ -162,7 +162,7 @@ def orchestrate(user_message: str, conversation_history: list) -> tuple:
         print(f"[디버그] 지금까지 쌓인 input_messages 개수: {len(input_messages)}")
 
         response = client.responses.create(
-            model="gpt-5",          # 모델은 위에 쓴 모델이랑 통일
+            model="gpt-5.5",          # 모델 5 -> 5.5
             tools=all_tools,
             input=input_messages,
         )

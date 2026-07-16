@@ -2,7 +2,7 @@
 예측 함수 (모델 학습 파트에서 관리, OpenAI Agent가 커스텀 툴로 호출)
 
 역할:
-- predict_price(): 학습된 머신러닝 모델로 직접 중고가 예측 (ML 모델 호출하기)
+- predict_price_iphone(): 학습된 머신러닝 모델로 직접 중고가 예측 (ML 모델 호출하기)
 - detect_anomaly(): 예측가와 판매가를 비교해 저가/적정가/고가 판단
 """
 
@@ -76,14 +76,14 @@ def _prepare_input(features: dict, feature_columns: list) -> pd.DataFrame:
 
 # ===========================================================================================
 # 이 아래 두 함수는 OpenAI API Agent 팀이 직접 가져다 쓸 인터페이스라서 _를 안 붙였습니다
-def predict_price(
+def predict_price_iphone(
     title: str,          # 제품명 (예: iPhone 16 Pro)
     storage_gb: int,     # 저장용량(GB)
     condition: str       # 제품 상태 등급 (tools 스키마의 enum 값과 일치해야 함)
 ) -> dict:
     """
     [ML 모델 호출] 입력받은 아이폰 정보를 ML 모델에 전달하여 적정 중고가를 예측한다.
-    OpenAI Agent SDK의 function tool(predict_price)로 그대로 등록되는 함수
+    OpenAI Agent SDK의 function tool(predict_price_iphone)로 그대로 등록되는 함수
 
     Args:
         title: 제품명 (예: "iPhone 16 Pro")
@@ -119,9 +119,9 @@ def predict_price(
     }
 
 def detect_anomaly(
-    predicted_price: int,   # predict_price()가 반환한 모델의 적정가 예측값(원)
+    predicted_price: int,   # predict_price_iphone()가 반환한 모델의 적정가 예측값(원)
     selling_price: int,     # 사용자가 입력한 실제 판매 가격(원)
-    residual_std: float     # predict_price()가 함께 반환한 모델 오차의 표준편차(원)
+    residual_std: float     # predict_price_iphone()가 함께 반환한 모델 오차의 표준편차(원)
 ) -> dict:
     """
     [순수 Python 로직 - 모델 호출 없음]
@@ -129,9 +129,9 @@ def detect_anomaly(
     OpenAI Agent SDK의 function tool(detect_anomaly)로 그대로 등록되는 함수.
 
     Args:
-        predicted_price: predict_price()가 반환한 모델의 적정가 예측값(원)
+        predicted_price: predict_price_iphone()가 반환한 모델의 적정가 예측값(원)
         selling_price: 사용자가 입력한 실제 판매 가격(원)
-        residual_std: predict_price()가 함께 반환한 모델 오차의 표준편차(원)
+        residual_std: predict_price_iphone()가 함께 반환한 모델 오차의 표준편차(원)
     """
 
     # 방어 코드: 예측가 또는 판매가가 0 이하면 비교 자체가 의미 없으므로 조기 리턴
@@ -181,8 +181,8 @@ def detect_anomaly(
     }
 
 if __name__ == "__main__":
-    price_result = predict_price(title="iPhone 16 Pro", storage_gb=256, condition="Very Good - Refurbished")
-    print("===== predict_price =====")
+    price_result = predict_price_iphone(title="iPhone 16 Pro", storage_gb=256, condition="Very Good - Refurbished")
+    print("===== predict_price_iphone =====")
     print(price_result)
 
     anomaly_result = detect_anomaly(
