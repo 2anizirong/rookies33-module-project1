@@ -7,6 +7,29 @@
     margin-bottom: -10px;
 }
 
+[data-testid="stAppViewContainer"] {
+    background-color: #f5f7fb;
+}
+
+[data-testid="stSidebar"] {
+    background-color: #1f2937;
+    color: #f5f7fb;
+}
+
+[data-testid="stSidebar"] hr {
+    border: none;
+    border-top: 1px solid white;
+}
+
+/* 사이드바 글자 */
+[data-testid="stSidebar"] .stButton > button,
+[data-testid="stSidebar"] .stButton > button p {
+    color: black !important;
+}
+
+.stButton > button {
+    color: #2563EB;
+}
 
 
 /* 상세검색 헤더 크기 줄이기 */
