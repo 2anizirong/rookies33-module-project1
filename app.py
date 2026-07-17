@@ -247,11 +247,13 @@ with st.sidebar:
     if st.button("💻 노트북", use_container_width=True):
             st.session_state.device_type = "노트북"
             st.session_state.started = False
+            st.session_state.messages = []
             st.rerun()
     # else :
     if st.button("📱 아이폰", use_container_width=True):
             st.session_state.device_type = "아이폰"
             st.session_state.started = False
+            st.session_state.messages = []
             st.rerun()
 
 
