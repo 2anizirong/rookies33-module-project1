@@ -18,7 +18,7 @@ import re
 
 import joblib
 import pandas as pd
-
+import numpy as np
 # ---------------------------------------------------------------------------
 # 상태(condition) 텍스트 -> condition_score 매핑
 # preprocess.py의 condition_score() 함수와 동일한 기준을 사용 (학습 데이터와 일치시키기 위함)
@@ -75,8 +75,11 @@ def _get_model():
 # -> 모든 입력이 0으로 취급
 # 학습 때 만들어진 feature_columns를 기준으로 수동 매핑하기 
 def _prepare_input(features: dict, feature_columns: list) -> pd.DataFrame:
-    df_input = pd.DataFrame(0, index=[0], columns=feature_columns)
-
+    # df_input = pd.DataFrame(0, index=[0], columns=feature_columns)
+    df_input = pd.DataFrame(
+        np.zeros((1, len(feature_columns))),
+        columns=feature_columns
+    )
     for key, value in features.items():
         if value is None:
             continue
