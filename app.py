@@ -56,10 +56,23 @@ def first_message ():
         else:
             first_prompt = st.text_input("첫번째 질문",placeholder="예 : 델 래티튜드 i5 16GB 512GB SSD Used 50만원이면 괜찮아?",label_visibility="collapsed")
 
-        submit = st.form_submit_button("검색", use_container_width=True)
+        submit = st.form_submit_button("검색", use_container_width=True, disabled=st.session_state.searching)
 
-    if first_prompt and submit:
-        st.session_state.messages.append({"role":"user","content":first_prompt})
+    if submit:
+        st.session_state.searching = True
+        st.session_state.first_prompt = first_prompt
+        st.rerun()
+
+    # searching 상태에서 실제 실행
+    if st.session_state.searching:
+
+        first_prompt = st.session_state.first_prompt
+
+        st.session_state.messages.append({
+            "role": "user",
+            "content": first_prompt
+        })
+
         st.session_state.orchestrate_history = []
 
         with st.spinner("🤖 답변을 생성 중입니다..."):
@@ -70,11 +83,14 @@ def first_message ():
             )
 
         st.session_state.messages.append({
-            "role":"assistant",
+            "role": "assistant",
             "content": str(result)
-            })
-        
+        })
+
         st.session_state.started = True
+
+        # 완료 후 다시 활성화
+        st.session_state.searching = False
         st.rerun()
 
 
@@ -98,6 +114,9 @@ if "device_type" not in st.session_state:
 
 if "loading" not in st.session_state:
     st.session_state.loading = False
+
+if "searching" not in st.session_state:
+    st.session_state.searching = False
 
 first_chat = not st.session_state.started
 
@@ -235,10 +254,13 @@ with st.sidebar:
     # st.title("Laptop Advisor")
     st.divider()
 
-    st.write("### 사용 방법")
-    st.write("""
+    st.markdown("""
     1. 제품 정보를 입력하세요.
+
+    > ★ TIP ★ 자세히 적을수록 정확한 시세를 알 수 있습니다.
+
     2. AI가 적정 가격을 분석합니다.
+
     3. 추가 질문을 할 수 있습니다.
     """)
 
