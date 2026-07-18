@@ -1,4 +1,3 @@
-# %% [markdown]
 # 모델 학습 담당 (모델 학습 파트: 김윤호, 김이안)
 # 
 # 역할:
@@ -130,7 +129,7 @@ def main():
 
     PATH = 'data/processed/0715ebay_laptops_model_ready_v1.csv'
     
-    df = load_data(PATH)\
+    df = load_data(PATH)
     
     X,X_train,X_test,y_train,y_test = split_data(df)
 
