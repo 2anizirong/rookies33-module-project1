@@ -19,99 +19,128 @@ from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import joblib
 
-# 2. 데이터셋 로드
-df = pd.read_csv('data/processed/0715ebay_laptops_model_ready_v1.csv')
+# 2. 데이터셋 로드 함수
+def load_data(PATH):
+    df = pd.read_csv(PATH)
 
-print(f'데이터 구성: {df.shape}')
-print(f"\n변수 타입 및 결측치 확인")
-print({df.info()})
+    print(f'데이터 구성: {df.shape}')
+    print(f"\n변수 타입 및 결측치 확인")
+    print({df.info()})
 
-print(df['price_usd'].describe())
+    print(df['price_usd'].describe())
 
-numeric_df = df.select_dtypes(include=['number'])
+    numeric_df = df.select_dtypes(include=['number'])
 
-# 상관관계 히트맵 (Correlation Heatmap)
-plt.figure(figsize=(10, 8))
-sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
-plt.title('Correlation Heatmap Matrix')
-plt.show()
-# %%
-X = df.drop(columns=["price_usd"])
-y = df["price_usd"]
+    # 상관관계 히트맵 (Correlation Heatmap)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt=".2f", linewidths=0.5)
+    plt.title('Correlation Heatmap Matrix')
+    plt.show()
+    
+    return df
+
+# 3. 데이터 분리 함수
+def split_data(df) :
+    X = df.drop(columns=["price_usd"])
+    y = df["price_usd"]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, 
+        test_size=0.2,
+        random_state=42
+    )
+    return(X,X_train,X_test,y_train,y_test)
 
 
-# %%
-# 3. 데이터 분리(8:2)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# 4. 데이터 전처리 함수
+def preprocess_data(X,X_train,X_test):
+    # 1. 숫자열 -1을 결측치로 변환
+    num_cols = X.select_dtypes(include="number").columns.tolist()
 
-# %%
-# 3. 결측치 처리
-num_cols = X.select_dtypes(include="number").columns.tolist()
+    X_train[num_cols] = X_train[num_cols].replace(-1, np.nan)
+    X_test[num_cols] = X_test[num_cols].replace(-1, np.nan)
 
-X_train[num_cols] = X_train[num_cols].replace(-1, np.nan)
-X_test[num_cols] = X_test[num_cols].replace(-1, np.nan)
+    # 2. 문자열 데이터 OneHotEncoding
+    cat_cols = X.select_dtypes(include="str").columns.tolist()
+    oh_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
 
-# %%
-# 4. 문자열 데이터 OneHotEncoding
-cat_cols = X.select_dtypes(include="str").columns.tolist()
-oh_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+    X_train_cat = oh_encoder.fit_transform(X_train[cat_cols])
+    X_test_cat = oh_encoder.transform(X_test[cat_cols])
 
-X_train_cat = oh_encoder.fit_transform(X_train[cat_cols])
-X_test_cat = oh_encoder.transform(X_test[cat_cols])
 
-# %%
-# 5. 수치형 데이터와 원핫 인코딩된 데이터 합치기
-X_train_final = np.hstack([X_train[num_cols].values, X_train_cat])
-X_test_final = np.hstack([X_test[num_cols].values, X_test_cat])
+    # 3. 수치형 데이터와 원핫 인코딩된 데이터 합치기
+    X_train_final = np.hstack([X_train[num_cols].values, X_train_cat])
+    X_test_final = np.hstack([X_test[num_cols].values, X_test_cat])
 
-# %%
-# 6. 모델 학습 및 예측 
-xgb = XGBRegressor(random_state=42, n_estimators=100, learning_rate=0.1)
-xgb.fit(X_train_final, y_train)
+    # 4. predict.py에 넘겨줄 feature 변수 선언
+    feature_columns = (num_cols + oh_encoder.get_feature_names_out(cat_cols).tolist())
+    
+    return (feature_columns,X_train_final, X_test_final)
 
-train_preds = xgb.predict(X_train_final)
-test_preds = xgb.predict(X_test_final)
+# 5. 모델 학습 함수
+def train_model(X_train,y_train):
+    model = XGBRegressor(
+        random_state=42,
+        n_estimators=100,
+        learning_rate=0.1
+    )
+    model.fit(X_train, y_train)
+    return model
 
-# %%
-# 7. 성능 지표 계산 및 출력
-mae = mean_absolute_error(y_test, test_preds)
-mse = mean_squared_error(y_test, test_preds)
-rmse = np.sqrt(mean_squared_error(y_test, test_preds))
-r2_train = r2_score(y_train,train_preds)
-r2_test = r2_score(y_test, test_preds)
+# 6. 성능 지표 계산 함수
+def evaluate_model(model,X_train,X_test,y_train,y_test):
+    train_preds = model.predict(X_train)
+    test_preds = model.predict(X_test)
 
-print("\n===== XGBoost =====")
-print(f"XGB_MAE: {mae}")
-print(f"XGB_MSE: {mse}")
-print(f"XGB_RMSE: {rmse}")
-print(f"XGB_R2: {r2_test:.3f}")
-print(f'XGB_R2_train: {r2_train:.3f}')
-print(f'XGB_Gap :{r2_train-r2_test:.3f}')
+    mae = mean_absolute_error(y_test, test_preds)
+    mse = mean_squared_error(y_test, test_preds)
+    rmse = np.sqrt(mean_squared_error(y_test, test_preds))
+    r2_train = r2_score(y_train,train_preds)
+    r2_test = r2_score(y_test, test_preds)
 
-# %%
-# 8. 가격 범위 계산에 쓸 residual 표준편차
-residuals = y_test-test_preds
-residual_std = np.std(residuals)
-print(f"\nresidual_std: {residual_std}")
+    print("\n===== XGBoost =====")
+    print(f"XGB_MAE: {mae}")
+    print(f"XGB_MSE: {mse}")
+    print(f"XGB_RMSE: {rmse}")
+    print(f"XGB_R2: {r2_test:.3f}")
+    print(f'XGB_R2_train: {r2_train:.3f}')
+    print(f'XGB_Gap :{r2_train-r2_test:.3f}')
+    
+    residuals = y_test-test_preds
+    residual_std = np.std(residuals)
+    print(f"\nresidual_std: {residual_std}")
+    
+    return residual_std
 
-# %%
-# 9. predict.py에서 인코딩을 똑같이 맞추기 위해 학습 때 쓴 컬럼 목록도 저장
-feature_columns = (
-    num_cols +
-    oh_encoder.get_feature_names_out(cat_cols).tolist()
-)
-# %%
-# 10. 모델 저장
-# 현재 폴더에 models 폴더가 없으면 만듬
-os.makedirs("models", exist_ok=True)
+# 7. 모델 저장 함수
+def save_model(model,feature_columns,residual_std):
+    # 현재 폴더에 models 폴더가 없으면 만듬
+    os.makedirs("models", exist_ok=True)
+    # 모델 저장
+    joblib.dump(
+    {
+        "model" : model,
+        "feature_columns" :feature_columns,
+        "residual_std" : residual_std,
+    },"models/price_model_laptop.pkl")
 
-joblib.dump(oh_encoder, 'models/onehot_encoder.pkl')
-joblib.dump(
-{
-    "model" : xgb,
-    "feature_columns" :feature_columns,
-    "residual_std" : residual_std,
-},"models/price_model_laptop.pkl")
+    print("저장완료 : models/price_model_laptop.pkl")
 
-print('\n저장완료 : models/onehot_encoder.pkl')
-print("저장완료 : models/price_model_laptop.pkl")
+# 8. 실행 함수
+def main():
+
+    PATH = 'data/processed/0715ebay_laptops_model_ready_v1.csv'
+    
+    df = load_data(PATH)\
+    
+    X,X_train,X_test,y_train,y_test = split_data(df)
+
+    feature_columns, X_train,X_test = preprocess_data(X,X_train,X_test)
+
+    model = train_model(X_train,y_train)
+
+    residual_std = evaluate_model(model,X_train,X_test,y_train,y_test)
+
+    save_model(model,feature_columns,residual_std)
+
+if __name__ == "__main__":
+    main()
