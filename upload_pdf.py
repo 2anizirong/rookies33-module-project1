@@ -14,7 +14,7 @@ VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
 
 # 업로드할 PDF 경로
-PDF_PATH = "docs/아이폰 중고 구매 가이드.pdf" # 추가 pdf파일이 생길 경우 관리 편리성을 위해 docs파일에서 관리
+PDF_PATH = "docs/노트북 중고 구매 가이드.pdf" # 추가 pdf파일이 생길 경우 관리 편리성을 위해 docs파일에서 관리
 
 
 # PDF 업로드

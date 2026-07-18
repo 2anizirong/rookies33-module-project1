@@ -2,7 +2,7 @@
 예측 함수 (모델 학습 파트에서 관리, OpenAI Agent가 커스텀 툴로 호출)
  
 역할:
-- predict_price(): 학습된 머신러닝 모델로 중고 노트북 적정가 예측 (ML 모델 호출)
+- predict_price_laptop(): 학습된 머신러닝 모델로 중고 노트북 적정가 예측 (ML 모델 호출)
 - detect_anomaly(): 예측가와 판매가를 비교해 저가/적정가/고가 판단
  
 데이터 스펙 (전처리팀 preprocess.py 산출물 기준, ebay_laptops_clean_processed.csv):
@@ -18,7 +18,7 @@ import re
 import numpy as np
 import joblib
 import pandas as pd
-
+import numpy as np
 # ---------------------------------------------------------------------------
 # 상태(condition) 텍스트 -> condition_score 매핑
 # preprocess.py의 condition_score() 함수와 동일한 기준을 사용 (학습 데이터와 일치시키기 위함)
@@ -75,6 +75,7 @@ def _get_model():
 # -> 모든 입력이 0으로 취급
 # 학습 때 만들어진 feature_columns를 기준으로 수동 매핑하기 
 def _prepare_input(features: dict, feature_columns: list) -> pd.DataFrame:
+    # df_input = pd.DataFrame(0, index=[0], columns=feature_columns)
     df_input = pd.DataFrame(
         np.zeros((1, len(feature_columns))),
         columns=feature_columns
@@ -99,7 +100,7 @@ def _prepare_input(features: dict, feature_columns: list) -> pd.DataFrame:
 # ===========================================================================================
 # 이 아래 두 함수는 OpenAI API Agent 팀이 직접 가져다 쓸 인터페이스라서 _를 안 붙였습니다
 # ===========================================================================================
-def predict_price(
+def predict_price_laptop(
     brand: str,                  # 제조사 (예: dell, hp, lenovo, apple, asus ...)
     model_family: str,           # 제품군 (예: thinkpad, macbook_pro, xps, latitude ...)
     cpu_family: str,             # CPU 등급 (예: core_i5, core_i7, ryzen_5, apple_m1 ...)
@@ -113,7 +114,7 @@ def predict_price(
 ) -> dict:
     """
     [ML 모델 호출] 입력받은 노트북 정보를 ML 모델에 전달하여 적정 중고가를 예측한다.
-    OpenAI Agent SDK의 function tool(predict_price)로 그대로 등록되는 함수.
+    OpenAI Agent SDK의 function tool(predict_price_laptop)로 그대로 등록되는 함수.
  
     Returns:
         {
@@ -172,9 +173,9 @@ def predict_price(
     }
 
 def detect_anomaly(
-    predicted_price: float,   # predict_price()가 반환한 모델의 적정가 예측값(달러)
+    predicted_price: float,   # predict_price_laptop()가 반환한 모델의 적정가 예측값(달러)
     selling_price: float,     # 사용자가 입력한 실제 판매 가격(달러)
-    residual_std: float,      # predict_price()가 함께 반환한 모델 오차의 표준편차(달러)
+    residual_std: float,      # predict_price_laptop()가 함께 반환한 모델 오차의 표준편차(달러)
 ) -> dict:
     """
     [순수 Python 로직 - 모델 호출 없음]
@@ -230,7 +231,7 @@ def detect_anomaly(
 
 if __name__ == "__main__":
     # 요건 예시
-    price_result = predict_price(
+    price_result = predict_price_laptop(
         brand="dell",
         model_family="latitude",
         cpu_family="core_i5",
@@ -242,7 +243,7 @@ if __name__ == "__main__":
         condition="Used",
         release_year=2019,
     )
-    print("===== predict_price =====")
+    print("===== predict_price_laptop =====")
     print(price_result)
  
     anomaly_result = detect_anomaly(
