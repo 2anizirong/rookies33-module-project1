@@ -15,7 +15,7 @@
 """
 
 import re
-
+import numpy as np
 import joblib
 import pandas as pd
 
@@ -75,8 +75,10 @@ def _get_model():
 # -> 모든 입력이 0으로 취급
 # 학습 때 만들어진 feature_columns를 기준으로 수동 매핑하기 
 def _prepare_input(features: dict, feature_columns: list) -> pd.DataFrame:
-    df_input = pd.DataFrame(0, index=[0], columns=feature_columns)
-
+    df_input = pd.DataFrame(
+        np.zeros((1, len(feature_columns))),
+        columns=feature_columns
+    )
     for key, value in features.items():
         if value is None:
             continue
