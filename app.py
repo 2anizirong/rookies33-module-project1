@@ -44,18 +44,12 @@ if "pending_prompt" not in st.session_state:
 if "orchestrate_history" not in st.session_state:
     st.session_state.orchestrate_history = []
 
-if "started" not in st.session_state:
-    st.session_state.started = False
-
 if "searching" not in st.session_state:
     st.session_state.searching = False
 
-# 첫 질문에 첨부된 이미지(노트북 사양 화면 등) 저장용
-# 이미지 파일의 실제 바이트 데이터 (사진 그 자체)
 if "first_image_bytes" not in st.session_state:
     st.session_state.first_image_bytes = None
  
-# "image/png" 같은 문자열 (파일 형식 정보)
 if "first_image_type" not in st.session_state:
     st.session_state.first_image_type = None
 
@@ -84,15 +78,18 @@ def add_message(role, content):
             "content": str(content)
         }
     )
-# 사용자 질문 받아서 Agent 호출
-def ask_agent(agent,user_message, history):
-    if agent is laptop:
+    
+def ask_agent(user_message, history):
+    agent = get_agent()
+
+    if st.session_state.device_type == "노트북":
         return agent.orchestrate(
             user_message,
             history,
-            image_bytes=st.session_state.get("first_image_bytes"),
-            image_media_type=st.session_state.get("first_image_type") or "image/png",
+            image_bytes=st.session_state.first_image_bytes,
+            image_media_type=st.session_state.first_image_type or "image/png",
         )
+
     return agent.orchestrate(user_message, history)
 
 # input placeholer 
@@ -117,18 +114,19 @@ def reset_chat(device):
     st.session_state.device_type = device
     st.session_state.messages = []
     st.session_state.orchestrate_history = []
-    st.session_state.started = False
+    st.session_state.first_image_bytes = None
+    st.session_state.first_image_type = None
+
+    st.session_state.pending_prompt = None
+    st.session_state.loading = False
 
 def first_message():
-    # 기존 코드에서 사용하던 부분이라 일단 남겨둠 - 추후에 바꿀수도 있음 // 아이폰이랑 노트북 구분하기 위함
     uploaded_image = None
-    
     with st.form("first_question"):
         if st.session_state.device_type == "아이폰":
             first_prompt = st.text_input("첫번째 질문",placeholder="예 : 아이폰 17 화이트 256gb는 얼마인가요?",label_visibility="collapsed")
         else:
             first_prompt = st.text_input("첫번째 질문",placeholder="예 : 델 래티튜드 i5 16GB 512GB SSD Used 50만원이면 괜찮아?",label_visibility="collapsed")
-            # 노트북 사양 화면 캡처 / 모델명 라벨 사진 업로드 (선택)
             uploaded_image = st.file_uploader(
                 "사양 화면 캡처나 모델명 라벨 사진이 있으면 함께 올려주세요 (선택)",
                 type=["png", "jpg", "jpeg"],
@@ -148,7 +146,6 @@ def first_message():
             st.session_state.first_image_type = None
         st.rerun()
 
-    # searching 상태에서 실제 실행
     if st.session_state.searching:
 
         first_prompt = st.session_state.first_prompt
@@ -161,14 +158,8 @@ def first_message():
         st.session_state.orchestrate_history = []
 
         with st.spinner("🤖 답변을 생성 중입니다..."):
-            agent_module = get_agent()
-            # result, st.session_state.orchestrate_history = agent_module.orchestrate(
-            #     first_prompt,
-            #     st.session_state.orchestrate_history
-            # )
-            # call_orchestrate()로 통일 - 노트북일 때만 이미지 같이 전달됨
+
             result, st.session_state.orchestrate_history = ask_agent(
-                agent_module,
                 first_prompt,
                 st.session_state.orchestrate_history,
             )
@@ -177,8 +168,6 @@ def first_message():
             "role": "assistant",
             "content": str(result)
         })
-
-        st.session_state.started = True
 
         # 완료 후 다시 활성화
         st.session_state.searching = False
@@ -251,23 +240,17 @@ for msg in st.session_state.messages:
 
 
  # 사용자에게 받은 질문 처리
-first_chat = not st.session_state.started
+first_chat = len(st.session_state.messages) == 0
 
 if first_chat:
     first_message()
 else:
-# 입력 단계
-    prompt = st.chat_input(
-    get_chat_placeholder()
-    )
-
+# 입력 단계 - 두번째 이어지는 질문 부터
+    prompt = st.chat_input(get_chat_placeholder())
 
     if prompt:
 
-        add_message(
-        "user",
-        prompt
-        )
+        add_message("user", prompt)
 
         st.session_state.pending_prompt = prompt
         st.session_state.loading = True
@@ -278,16 +261,13 @@ else:
 if st.session_state.loading:
     try:
         with st.spinner("🤖 답변 생성 중..."):
-            agent_module = get_agent()
             result, st.session_state.orchestrate_history = ask_agent(
-                agent_module,
                 st.session_state.pending_prompt,
                 st.session_state.orchestrate_history,
             )
-        add_message(
-            "assistant",
-            result
-        )
+
+        add_message( "assistant",result)
+
     except Exception as e:
         st.error(f"답변 생성 중 오류가 발생했습니다: {e}")
     finally:
