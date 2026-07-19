@@ -18,8 +18,7 @@ SK쉴더스 루키즈 33기 모듈프로젝트1 (2026.07.13 ~ 07.20)
 ├── docs/                             # 발표자료, 구매 가이드 PDF (file_search 벡터스토어 원본)
 ├── models/                           # 학습된 모델 아티팩트
 │   ├── price_model_iphone.pkl        # 아이폰 가격 예측 모델 + feature_columns + residual_std
-│   ├── price_model_laptop.pkl        # 노트북 가격 예측 모델 + num_cols/cat_cols + residual_std
-│   └── onehot_encoder.pkl            # 노트북 모델 학습 시 fit된 OneHotEncoder (예측 시 재사용)
+│   └── price_model_laptop.pkl        # 노트북 가격 예측 모델 + num_cols/cat_cols + residual_std
 ├── notebooks/                        # EDA, 전처리, 모델링 실험용 노트북
 ├── styles/                           # Streamlit 커스텀 CSS
 │   └── style.css
