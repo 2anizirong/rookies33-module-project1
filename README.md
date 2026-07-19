@@ -13,19 +13,40 @@ SK쉴더스 루키즈 33기 모듈프로젝트1 (2026.07.13 ~ 07.20)
 ```
 .
 ├── data/
-│   ├── raw/                # 원본 eBay CSV
-│   └── processed/          # 전처리 완료 데이터
-├── notebooks/               # EDA, 전처리, 모델링 실험용 노트북
-├── models/                  # 학습된 모델(.pkl) 저장
-├── docs/                    # 보고서, 발표자료
-├── preprocess.py            # 데이터 전처리
-├── train.py                 # 모델 학습
-├── predict.py                # 가격 예측 함수 (Agent 커스텀 툴)
-├── agent.py                   # OpenAI Agent SDK 오케스트레이션
-├── app.py                      # Streamlit UI
+│   ├── raw/                          # 원본 CSV (eBay 노트북, 아이폰 중고 시세)
+│   └── processed/                    # 전처리 완료 데이터 (모델 학습 입력용)
+├── docs/                             # 발표자료, 구매 가이드 PDF (file_search 벡터스토어 원본)
+├── models/                           # 학습된 모델 아티팩트
+│   ├── price_model_iphone.pkl        # 아이폰 가격 예측 모델 + feature_columns + residual_std
+│   ├── price_model_laptop.pkl        # 노트북 가격 예측 모델 + num_cols/cat_cols + residual_std
+│   └── onehot_encoder.pkl            # 노트북 모델 학습 시 fit된 OneHotEncoder (예측 시 재사용)
+├── notebooks/                        # EDA, 전처리, 모델링 실험용 노트북
+├── styles/                           # Streamlit 커스텀 CSS
+│   └── style.css
+├── utils/                            # Streamlit 폼/유효성 검사 유틸리티
+│   ├── forms.py                      # iphone_form(), laptop_form() - 입력 폼 UI
+│   └── validator.py                  # validate_iphone(), validate_laptop() - 입력값 검증
+├── .streamlit/                       # Streamlit 설정 (테마 등)
+│
+├── preprocess_iphone.py              # 아이폰 원본 데이터 전처리
+├── preprocess_laptop.py              # 노트북(eBay) 원본 데이터 전처리
+├── train_iphone.py                   # 아이폰 가격 예측 모델 학습
+├── train_laptop.py                   # 노트북 가격 예측 모델 학습 (OneHotEncoder + XGBoost)
+├── predict_iphone.py                 # 아이폰 predict_price_iphone() / detect_anomaly()
+├── predict_laptop.py                 # 노트북 predict_price_laptop() / detect_anomaly()
+├── currency.py                       # USD↔KRW 실시간 환율 조회 + convert_currency() (Agent 툴)
+│
+├── agent_iphone.py                   # 아이폰 전용 오케스트레이션 (orchestrate())
+├── agent_laptop.py                   # 노트북 전용 오케스트레이션 (orchestrate(), 이미지 인식 지원)
+├── app.py                            # Streamlit UI - 기기 종류에 따라 agent_iphone/laptop 분기 호출
+│
+├── create_vector_store.py            # file_search용 Vector Store 생성 스크립트 (1회 실행용)
+├── upload_pdf.py                     # 구매 가이드 PDF를 Vector Store에 업로드하는 스크립트
+│
 ├── requirements.txt
-├── .env.example
-└── .gitignore
+├── .env / .env.example               # OPENAI_API_KEY, VECTOR_STORE_ID 등 환경변수
+├── .gitignore
+└── README.md
 ```
 
 ## 핵심 기능 (MVP)
