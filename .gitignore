@@ -9,8 +9,8 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
-# 모델 아티팩트
-models/*.pkl
+# 모델 아티팩트 -> 배포를 위해 깃허브에 추가해야 함
+# models/*.pkl
 
 # 파이썬
 __pycache__/
