@@ -121,6 +121,8 @@ def reset_chat(device):
 
 def first_message():
     # 기존 코드에서 사용하던 부분이라 일단 남겨둠 - 추후에 바꿀수도 있음 // 아이폰이랑 노트북 구분하기 위함
+    uploaded_image = None
+    
     with st.form("first_question"):
         if st.session_state.device_type == "아이폰":
             first_prompt = st.text_input("첫번째 질문",placeholder="예 : 아이폰 17 화이트 256gb는 얼마인가요?",label_visibility="collapsed")
