@@ -10,6 +10,7 @@ orchestrate(): 대화 오케스트레이션 (Function Calling 왕복 처리)
 # ==========================================================
 # 모듈 import (전부 파일 최상단에 모음)
 # ==========================================================
+import base64  # 업로드된 이미지를 base64로 인코딩해서 Responses API에 넘기기 위함
 import json
 import os
 
@@ -195,6 +196,14 @@ SYSTEM_PROMPT = """
     이러면 사용자가 두 가지 관점(실제 매물 시세 vs 모델 예측 적정가)을 다 볼 수 있어.
 11. 브랜드/CPU/RAM/저장장치만 입력하면 다른 값들은 'unknown'로 처리하고 predict_price_laptop 함수를 호출해.
 12. 노트북/랩탑 거래 관련 문의에만 답변해줘. 다른 건 해주지마.
+13. 사용자가 이미지를 함께 보냈다면, 그 이미지는 노트북의 시스템 정보 화면(설정 > 정보,
+    작업관리자, dxdiag 등)이거나 노트북 뒤판의 모델명 라벨/스티커 사진일 수 있어.
+    이미지 안의 텍스트를 최대한 정확히 읽어서 브랜드, 모델군, CPU, RAM, 저장장치 종류/용량,
+    운영체제 정보를 파악하고, 이를 근거로 predict_price_laptop을 호출해.
+    이미지에서 읽은 값과 사용자가 텍스트로 명시한 값이 다르면, 사용자가 텍스트로 명시한 값을 우선해.
+    이미지에서 읽은 값을 그대로 쓸 경우, 최종 답변에 "이미지에서 인식한 사양: ..." 형태로
+    무엇을 읽어서 사용했는지 짧게 밝혀줘. 이미지 화질이 나쁘거나 정보를 읽기 어려우면
+    추측하지 말고 어떤 항목이 안 보이는지 사용자에게 알려줘.
 """
 
 # 사용자 메시지를 받아서
@@ -203,7 +212,12 @@ SYSTEM_PROMPT = """
 # (호스팅 툴 web_search/file_search는 OpenAI가 알아서 처리하므로 신경 안 써도 됨)
 # 에이전트가 더 이상 함수 호출이 필요없으면 자연어로 출력해서 사용자에게 반환
 # refactor: 이전까지의 대화 기록 누적
-def orchestrate(user_message: str, conversation_history: list) -> tuple:
+def orchestrate(
+        user_message: str, 
+        conversation_history: list,
+        image_bytes: bytes = None,             # 업로드된 이미지 (없으면 None)
+        image_media_type: str = "image/png",   # 이미지 MIME 타입
+        ) -> tuple:
     if conversation_history is None:
         conversation_history = []
 
@@ -217,16 +231,28 @@ def orchestrate(user_message: str, conversation_history: list) -> tuple:
         {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
     ]
 
+    # 이미지가 있으면 텍스트+이미지를 함께 담은 멀티모달 콘텐츠로 사용자 메시지 구성
+    # (predict_price_laptop 호출 자체는 그대로 Function Calling으로 이루어짐 - 이미지는 GPT가 파라미터를 채우는 데 참고하는 입력일 뿐 별도의 독립 호출이 아님)
+    if image_bytes:
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+        user_content = [
+            {"type": "input_text", "text": user_message},
+            {"type": "input_image", "image_url": f"data:{image_media_type};base64,{image_base64}"},
+        ]
+        print(f"[디버그] 이미지 포함 메시지 구성됨 ({image_media_type}, {len(image_bytes)} bytes)")
+    else:
+        user_content = user_message
+
     # 대화가 처음 시작될 때만 시스템 프롬프트를 맨 앞에 넣음
     if not conversation_history:
         # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임)
         input_messages = conversation_history + [
             # 이게 없으면 GPT가 함수 안 쓰고 알아서 답함
             {"role": "developer", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message}
+            {"role": "user", "content": user_content}
         ]
     else:
-        input_messages = conversation_history + [{"role": "user", "content": user_message}]
+        input_messages = conversation_history + [{"role": "user", "content": user_content}]
 
     # 반복 횟수 확인용
     round_num = 0
