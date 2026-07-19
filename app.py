@@ -8,9 +8,6 @@ Streamlit UI
 """
 
 import streamlit as st
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
 import agent_iphone as iphone
 import agent_laptop as laptop
 
@@ -18,9 +15,6 @@ import agent_laptop as laptop
 # -----------------------------
 # 초기 설정
 # -----------------------------
-
-load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 st.set_page_config(page_title="AI 전자기기 적정가격 예측 어시스턴트",layout="wide")
 
 # css 파일 로드 
@@ -38,14 +32,12 @@ load_css("styles/style.css")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "started" not in st.session_state:
-    st.session_state.started = False
-
 if "device_type" not in st.session_state:
-    st.session_state.device_type = None
+    st.session_state.device_type = "노트북"
 
 if "loading" not in st.session_state:
     st.session_state.loading = False
+
 if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = None
 
@@ -91,7 +83,7 @@ def ask_agent(prompt):
 
     return result
 
-# input 라벨링
+# input placeholer 
 def get_chat_placeholder():
     if st.session_state.loading:
         return "🤖 답변 생성 중입니다..."
@@ -203,21 +195,19 @@ if prompt:
 
 # 답변 생성 단계
 if st.session_state.loading:
-
-    with st.spinner("🤖 답변 생성 중..."):
-
-        result = ask_agent(
-            st.session_state.pending_prompt
+    try:
+        with st.spinner("🤖 답변 생성 중..."):
+            result = ask_agent(
+                st.session_state.pending_prompt
+            )
+        add_message(
+            "assistant",
+            result
         )
-
-    add_message(
-        "assistant",
-        result
-    )
-
-    st.session_state.loading = False
-    st.session_state.pending_prompt = None
-
-    st.rerun()
-
+    except Exception as e:
+        st.error(f"답변 생성 중 오류가 발생했습니다: {e}")
+    finally:
+        st.session_state.loading = False
+        st.session_state.pending_prompt = None
+        st.rerun()
 
