@@ -14,7 +14,8 @@ VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
 
 # 업로드할 PDF 경로
-PDF_PATH = "docs/노트북 중고 구매 가이드.pdf" # 추가 pdf파일이 생길 경우 관리 편리성을 위해 docs파일에서 관리
+# 새로운 PDF가 추가될 경우 docs 폴더에서 관리합니다.
+PDF_PATH = "docs/노트북 중고 구매 가이드.pdf" 
 
 
 # PDF 업로드
@@ -29,8 +30,8 @@ print("파일 업로드 완료")
 print("File ID :", uploaded_file.id)
 
 
-# Vector Store에 PDF 연결
-print("Vector Store 연결 중...")
+# Vector Store에 PDF 등록
+print("Vector Store 등록 중...")
 
 client.vector_stores.files.create(
     vector_store_id=VECTOR_STORE_ID,
