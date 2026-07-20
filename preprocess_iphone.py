@@ -87,9 +87,9 @@ def recover_storage(title: str) -> str:
 
 
 def extract_color(title: str) -> str:
-    """제목의 첫 번째 색상을 소문자로 추출하고, 없으면 unknown을 반환한다."""
+    """제목의 첫 번째 색상을 소문자로 추출하고, 없으면 빈칸을 반환한다."""
     match = COLOR_PATTERN.search(title)
-    return match.group(0).lower() if match else "unknown"
+    return match.group(0).lower() if match else ""
 
 
 def main() -> None:
