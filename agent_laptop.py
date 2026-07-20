@@ -1,6 +1,8 @@
 """
 agent.py
 
+중고 노트북 가격 상담 에이전트 (OpenAI Responses API 기반)
+
 <필요 함수>
 predict_price_laptop(), detect_anomaly(): predict.py 에서 import만 하기
 web_search / file_search: 호스팅 툴로 등록
@@ -10,14 +12,13 @@ orchestrate(): 대화 오케스트레이션 (Function Calling 왕복 처리)
 # ==========================================================
 # 모듈 import (전부 파일 최상단에 모음)
 # ==========================================================
-import base64  # 업로드된 이미지를 base64로 인코딩해서 Responses API에 넘기기 위함
 import json
 import os
 
-from dotenv import load_dotenv
-from openai import OpenAI
+from dotenv import load_dotenv       # .env 파일에서 환경변수를 읽어오기 위한 라이브러리
+from openai import OpenAI            # OpenAI 공식 SDK
 
-from predict_laptop import predict_price_laptop, detect_anomaly   # predict_laptop.py에서 가져오기
+from predict_laptop import predict_price_laptop, detect_anomaly   # predict_laptop.py에서 가져오기 (ML 모델 함수 2개)
 from currency import convert_currency       # currency.py 에서 환율 계산 가져오기 
 
 # ==========================================================
@@ -34,7 +35,8 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # File Search에서 사용할 Vector Store ID (이것도 .env에서 관리하는 걸 추천)
 VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
-# 실제 함수 이름으로 함수 객체 매핑하기 (agent가 호출 요청하면 여기서 실행)
+# 실제 함수 이름(문자열) -> 함수 객체 매핑
+# 에이전트가 이 함수를 호출해줘라고 요청하면, 여기서 이름으로 실제 파이썬 함수를 찾아 실행함
 AVAILABLE_FUNCTIONS = {
     "predict_price_laptop": predict_price_laptop,
     "detect_anomaly": detect_anomaly,
@@ -52,7 +54,7 @@ tools = [
         "type": "function",
         "name": "predict_price_laptop",
         "description": "입력받은 중고 노트북 정보를 기반으로 머신러닝 모델을 호출하여 적정 중고가(달러)를 예측한다.",
-        "strict": True,
+        "strict": True,   # 파라미터 스키마를 엄격하게 검증 (타입/필수값 등 어긋나면 호출 실패)
         "parameters": {
             "type": "object",
             "properties": {
@@ -68,6 +70,7 @@ tools = [
                 "model_family": {
                     "type": "string",
                     "description": "제품군 (예: thinkpad, macbook_pro, xps, latitude, ideapad, pavilion 등)",
+                    # brand와 달리 enum 없이 자유 텍스트 (종류가 48종+ 라서 전부 나열하지 않음)
                 },
                 "cpu_family": {
                     "type": "string",
@@ -108,14 +111,15 @@ tools = [
                 },
                 "release_year": {
                     "type": "integer",
-                    "description": "출시연도. 모르면 -1",
+                    "description": "출시연도. 모르면 -1",   # -1은 값이 없음을 나타내는 센티널 값
                 },
             },
+            # 아래 10개 필드가 전부 있어야만 함수 호출 가능 (strict 모드이므로 하나라도 빠지면 실패)
             "required": [
                 "brand", "model_family", "cpu_family", "ram_gb", "storage_type",
                 "storage_capacity_gb", "screen_size_inch", "os", "condition", "release_year",
             ],
-            "additionalProperties": False,
+            "additionalProperties": False,   # 정의되지 않은 필드는 허용하지 않음
         },
     },
     {
@@ -177,6 +181,8 @@ tools = [
 # ==========================================================
 # 시스템 프롬프트 (에이전트 동작 규칙)
 # ==========================================================
+# developer 역할 메시지로 전달되어, 에이전트가 지켜야 할 행동 규칙을 명시함
+# 이게 없으면 GPT가 함수 호출 없이 자기 지식만으로 답변해버릴 수 있음
 SYSTEM_PROMPT = """
 너는 중고 노트북 가격 상담 어시스턴트야.
  
@@ -196,14 +202,6 @@ SYSTEM_PROMPT = """
     이러면 사용자가 두 가지 관점(실제 매물 시세 vs 모델 예측 적정가)을 다 볼 수 있어.
 11. 브랜드/CPU/RAM/저장장치만 입력하면 다른 값들은 'unknown'로 처리하고 predict_price_laptop 함수를 호출해.
 12. 노트북/랩탑 거래 관련 문의에만 답변해줘. 다른 건 해주지마.
-13. 사용자가 이미지를 함께 보냈다면, 그 이미지는 노트북의 시스템 정보 화면(설정 > 정보,
-    작업관리자, dxdiag 등)이거나 노트북 뒤판의 모델명 라벨/스티커 사진일 수 있어.
-    이미지 안의 텍스트를 최대한 정확히 읽어서 브랜드, 모델군, CPU, RAM, 저장장치 종류/용량,
-    운영체제 정보를 파악하고, 이를 근거로 predict_price_laptop을 호출해.
-    이미지에서 읽은 값과 사용자가 텍스트로 명시한 값이 다르면, 사용자가 텍스트로 명시한 값을 우선해.
-    이미지에서 읽은 값을 그대로 쓸 경우, 최종 답변에 "이미지에서 인식한 사양: ..." 형태로
-    무엇을 읽어서 사용했는지 짧게 밝혀줘. 이미지 화질이 나쁘거나 정보를 읽기 어려우면
-    추측하지 말고 어떤 항목이 안 보이는지 사용자에게 알려줘.
 """
 
 # 사용자 메시지를 받아서
@@ -212,12 +210,27 @@ SYSTEM_PROMPT = """
 # (호스팅 툴 web_search/file_search는 OpenAI가 알아서 처리하므로 신경 안 써도 됨)
 # 에이전트가 더 이상 함수 호출이 필요없으면 자연어로 출력해서 사용자에게 반환
 # refactor: 이전까지의 대화 기록 누적
-def orchestrate(
-        user_message: str, 
-        conversation_history: list,
-        image_bytes: bytes = None,             # 업로드된 이미지 (없으면 None)
-        image_media_type: str = "image/png",   # 이미지 MIME 타입
-        ) -> tuple:
+def orchestrate(user_message: str, conversation_history: list) -> tuple:
+    """
+    사용자 메시지 한 개를 받아 에이전트(GPT)와 주고받는 전체 흐름을 처리하는 함수.
+
+    동작 순서:
+    1) 이전 대화 기록(conversation_history)에 이번 사용자 메시지를 이어붙인다.
+       (최초 대화라면 시스템 프롬프트를 맨 앞에 함께 넣는다)
+    2) GPT에게 커스텀 함수(predict_price_laptop, detect_anomaly, convert_currency) +
+       호스팅 툴(web_search, file_search)을 함께 제공하며 응답을 요청한다.
+    3) 응답에 "함수 호출 요청"이 있으면 -> 실제 파이썬 함수를 실행하고,
+       그 결과를 다시 대화 기록에 추가해서 GPT에게 재요청한다. (함수 호출이 없을 때까지 반복)
+    4) 함수 호출 요청이 더 이상 없으면 -> 최종 자연어 답변과 누적된 대화 기록을 반환한다.
+
+    Args:
+        user_message (str): 사용자가 입력한 질문/메시지
+        conversation_history (list): 지금까지 쌓인 대화 기록 (Responses API 형식의 input 리스트)
+
+    Returns:
+        tuple: (최종 답변 텍스트(str), 갱신된 대화 기록(list))
+    """
+    # 최초 호출 시 conversation_history가 None으로 들어올 수 있으므로 빈 리스트로 초기화
     if conversation_history is None:
         conversation_history = []
 
@@ -225,99 +238,99 @@ def orchestrate(
     all_tools = tools + [
         {
             "type": "web_search_preview",
-            # 검색 컨텍스트를 줄여서 검색 횟수/깊이 제한
+            # 검색 컨텍스트를 줄여서 검색 횟수와 깊이를 제한 (비용/속도 절약)
             "search_context_size": "low",
         },
         {"type": "file_search", "vector_store_ids": [VECTOR_STORE_ID]},
     ]
 
-    # 이미지가 있으면 텍스트+이미지를 함께 담은 멀티모달 콘텐츠로 사용자 메시지 구성
-    # (predict_price_laptop 호출 자체는 그대로 Function Calling으로 이루어짐 - 이미지는 GPT가 파라미터를 채우는 데 참고하는 입력일 뿐 별도의 독립 호출이 아님)
-    if image_bytes:
-        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-        user_content = [
-            {"type": "input_text", "text": user_message},
-            {"type": "input_image", "image_url": f"data:{image_media_type};base64,{image_base64}"},
-        ]
-        print(f"[디버그] 이미지 포함 메시지 구성됨 ({image_media_type}, {len(image_bytes)} bytes)")
-    else:
-        user_content = user_message
-
     # 대화가 처음 시작될 때만 시스템 프롬프트를 맨 앞에 넣음
     if not conversation_history:
         # 대화 기록 (에이전트 응답, 함수 실행 결과가 계속 쌓임)
+        # 참고: conversation_history가 이 시점엔 빈 리스트이므로
+        #       'conversation_history + [...]'는 결과적으로 [...]와 동일함
         input_messages = conversation_history + [
             # 이게 없으면 GPT가 함수 안 쓰고 알아서 답함
             {"role": "developer", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content}
+            {"role": "user", "content": user_message}
         ]
     else:
-        input_messages = conversation_history + [{"role": "user", "content": user_content}]
+        # 이미 대화가 진행 중이라면 기존 기록 뒤에 새 사용자 메시지만 추가
+        input_messages = conversation_history + [{"role": "user", "content": user_message}]
 
-    # 반복 횟수 확인용
+    # 반복 횟수 확인용 (디버깅 로그에 몇 번째 API 호출인지 표시)
     round_num = 0
 
     # 에이전트가 함수 호출을 계속 요청할 경우 -> 무한 루프로 처리
+    # (함수 호출 -> 결과 전달 -> 다시 GPT 호출 -> 필요하면 또 함수 호출... 을 반복)
     while True:
         round_num += 1
         print(f"\n[디버그] ===== {round_num}번째 API 호출 시작 =====")
         print(f"[디버그] 지금까지 쌓인 input_messages 개수: {len(input_messages)}")
 
+        # GPT에게 현재까지의 대화 기록과 사용 가능한 툴 목록을 전달하여 응답 생성 요청
         response = client.responses.create(
             model="gpt-5.5",          # 모델 수정 5 -> 5.5
             tools=all_tools,
             input=input_messages,
         )
 
-        # response.output에 있는 모든 항목의 타입을 확인
+        # response.output에 있는 모든 항목의 타입을 확인 (예: message, function_call 등)
         print(f"[디버그] 이번 응답에 포함된 항목 타입들: {[item.type for item in response.output]}")
 
-        # 웅답에 커스텀 함수 호출 부탁이 있었는지
+        # 응답에 커스텀 함수 호출 요청이 있었는지 필터링
         function_calls = [item for item in response.output if item.type == "function_call"]
 
+        # 함수 호출 요청이 하나도 없다면 -> GPT가 최종 답변을 텍스트로 생성한 것이므로 루프 종료
         if not function_calls:
             print(f"[디버그] -> 함수 호출 요청 없음. GPT가 자체 지식/이전 함수 결과로 최종 텍스트 답변 생성함.")
             print(f"[디버그] -> 이번 응답의 output_text 앞부분: {response.output_text[:80]}...")
-            # 최종 답변도 기록에 추가
+            # 최종 답변도 기록에 추가 (다음 turn에서 문맥으로 활용하기 위함)
             input_messages += response.output
             return response.output_text, input_messages
 
         print(f"[디버그] -> 이번 응답에서 호출 요청된 함수: {[call.name for call in function_calls]}")
 
-        # 이전 응답에 대화 기록 추가
+        # 이번 응답(함수 호출 요청 포함)을 대화 기록에 추가
         input_messages += response.output
 
-        # 이제 하나씩 실행
+        # 요청된 함수들을 하나씩 실제로 실행
         for call in function_calls:
+            # 함수 이름으로 실제 파이썬 함수 객체 조회
             func = AVAILABLE_FUNCTIONS.get(call.name)
+            # GPT가 넘겨준 인자(JSON 문자열)를 파이썬 dict로 변환
             args = json.loads(call.arguments)
             print(f"[디버그]    실행 중: {call.name}({args})")
 
+            # 함수가 존재하면 실행, 없으면 에러 딕셔너리 반환
             result = func(**args) if func else {"error": f"알 수 없는 함수: {call.name}"}
             print(f"[디버그]    실행 결과: {result}")
 
             # 함수 실행 결과를 대화 기록에 추가 (에이전트가 다음 턴에 이 결과를 보고 답변 생성)
             input_messages.append({
                 "type": "function_call_output",
-                "call_id": call.call_id,
-                "output": json.dumps(result, ensure_ascii=False),
+                "call_id": call.call_id,          # 어떤 함수 호출 요청에 대한 결과인지 매칭용 ID
+                "output": json.dumps(result, ensure_ascii=False),  # 한글 깨짐 방지(ensure_ascii=False)
             })
 
         print(f"[디버그] -> 함수 실행 결과를 input_messages에 추가함. 다음 반복에서 이 결과를 GPT에게 다시 보여줌.")
+        # while 루프의 처음으로 돌아가 GPT를 다시 호출 (함수 결과를 바탕으로 추가 답변 또는 추가 함수 호출)
 
 # ==========================================================
 # 메인 실행부
 # ==========================================================
 if __name__ == "__main__":
     print("중고 노트북 가격 어시스턴트입니다. 종료하려면 'exit' 입력하세요.\n")
-    history = []
+    history = []  # 대화 기록 누적 (매 turn마다 orchestrate()에 넘겨서 문맥 유지)
  
+    # 사용자가 종료 명령을 입력할 때까지 계속 질문을 받는 반복 루프
     while True:
         user_message = input("질문을 입력하세요 (예: 델 래티튜드 i5 16GB 512GB SSD Used 50만원이면 괜찮아?): ")
  
         if user_message.strip().lower() in ("exit", "quit", "종료"):
             break
  
+        # history 계속 이어서 전달 -> orchestrate()가 새 답변과 갱신된 history를 반환
         answer, history = orchestrate(user_message, history)
  
         print("==================== 답변 ====================")
